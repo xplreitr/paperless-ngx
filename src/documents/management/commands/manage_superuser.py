@@ -2,7 +2,7 @@ import logging
 import os
 
 from django.contrib.auth.models import User
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand
 
 
 logger = logging.getLogger("paperless.management.superuser")
@@ -11,32 +11,56 @@ logger = logging.getLogger("paperless.management.superuser")
 class Command(BaseCommand):
 
     help = """
-        Creates a Django superuser based on env variables.
-    """.replace("    ", "")
+        Creates a Django superuser:
+        User named: admin
+        Email: root@localhost
+        with password based on env variable.
+        No superuser will be created, when:
+        - The username is taken already exists
+        - A superuser already exists
+        - PAPERLESS_ADMIN_PASSWORD is not set
+    """.replace(
+        "    ",
+        "",
+    )
 
     def handle(self, *args, **options):
 
-        username = os.getenv('PAPERLESS_ADMIN_USER')
-        if not username:
+        username = os.getenv("PAPERLESS_ADMIN_USER", "admin")
+        mail = os.getenv("PAPERLESS_ADMIN_MAIL", "root@localhost")
+        password = os.getenv("PAPERLESS_ADMIN_PASSWORD")
+
+        # Check if there's already a user called admin
+        if User.objects.filter(username=username).exists():
+            self.stdout.write(
+                self.style.NOTICE(
+                    f"Did not create superuser, a user {username} already exists",
+                ),
+            )
             return
 
-        mail = os.getenv('PAPERLESS_ADMIN_MAIL', 'root@localhost')
-        password = os.getenv('PAPERLESS_ADMIN_PASSWORD')
+        # Check if any superuseruser
+        # exists already, leave as is if it does
+        if User.objects.filter(is_superuser=True).count() > 0:
+            self.stdout.write(
+                self.style.NOTICE(
+                    "Did not create superuser, the DB already contains superusers",
+                ),
+            )
+            return
 
-        # Check if user exists already, leave as is if it does
-        if User.objects.filter(username=username).exists():
-            user: User = User.objects.get_by_natural_key(username)
-            user.set_password(password)
-            user.save()
-            self.stdout.write(f"Changed password of user {username}.")
-        elif password:
-            # Create superuser based on env variables
+        if password is None:
+            self.stdout.write(
+                self.style.ERROR(
+                    "Please check if PAPERLESS_ADMIN_PASSWORD has been"
+                    " set in the environment",
+                ),
+            )
+        else:
+            # Create superuser with password based on env variable
             User.objects.create_superuser(username, mail, password)
             self.stdout.write(
-                f'Created superuser "{username}" with provided password.')
-        else:
-            self.stdout.write(
-                f'Did not create superuser "{username}".')
-            self.stdout.write(
-                'Make sure you specified "PAPERLESS_ADMIN_PASSWORD" in your '
-                '"docker-compose.env" file.')
+                self.style.SUCCESS(
+                    f'Created superuser "{username}" with provided password.',
+                ),
+            )

@@ -1,13 +1,18 @@
 <app-page-header title="Settings" i18n-title>
-
+  <button class="btn btn-sm btn-outline-primary" (click)="tourService.start()"><ng-container i18n>Start tour</ng-container></button>
+  <a class="btn btn-sm btn-primary ms-3" href="admin/" target="_blank">
+      <ng-container i18n>Open Django Admin</ng-container>
+      <svg class="sidebaricon ms-1" fill="currentColor">
+        <use xlink:href="assets/bootstrap-icons.svg#arrow-up-right"/>
+      </svg>
+  </a>
 </app-page-header>
 
-<!-- <p>items per page, documents per view type</p> -->
 <form [formGroup]="settingsForm" (ngSubmit)="saveSettings()">
 
-  <ul ngbNav #nav="ngbNav" class="nav-tabs">
-    <li [ngbNavItem]="1">
-      <a ngbNavLink i18n>General settings</a>
+  <ul ngbNav #nav="ngbNav" (navChange)="onNavChange($event)" [(activeId)]="activeNavID" class="nav-tabs">
+    <li [ngbNavItem]="SettingsNavIDs.General">
+      <a ngbNavLink i18n>General</a>
       <ng-template ngbNavContent>
 
         <h4 i18n>Appearance</h4>
@@ -18,11 +23,11 @@
           </div>
           <div class="col">
 
-            <select class="form-control" formControlName="displayLanguage">
-              <option *ngFor="let lang of displayLanguageOptions" [ngValue]="lang.code">{{lang.name}}<span *ngIf="lang.code && currentLocale != 'en-US'"> - {{lang.englishName}}</span></option>
+            <select class="form-select" formControlName="displayLanguage">
+              <option *ngFor="let lang of displayLanguageOptions" [ngValue]="lang.code">{{lang.name}}<span *ngIf="lang.code && currentLocale !== 'en-US'"> - {{lang.englishName}}</span></option>
             </select>
 
-            <small class="form-text text-muted" i18n>You need to reload the page after applying a new language.</small>
+            <small *ngIf="displayLanguageIsDirty" class="form-text text-primary" i18n>You need to reload the page after applying a new language.</small>
 
           </div>
         </div>
@@ -33,7 +38,7 @@
           </div>
           <div class="col">
 
-            <select class="form-control" formControlName="dateLocale">
+            <select class="form-select" formControlName="dateLocale">
               <option *ngFor="let lang of dateLocaleOptions" [ngValue]="lang.code">{{lang.name}}<span *ngIf="lang.code"> - {{today | customDate:'shortDate':null:lang.code}}</span></option>
             </select>
 
@@ -68,7 +73,7 @@
           </div>
           <div class="col">
 
-            <select class="form-control" formControlName="documentListItemPerPage">
+            <select class="form-select" formControlName="documentListItemPerPage">
               <option [ngValue]="10">10</option>
               <option [ngValue]="25">25</option>
               <option [ngValue]="50">50</option>
@@ -91,12 +96,54 @@
 
         <div class="row mb-3">
           <div class="col-md-3 col-form-label">
+            <span i18n>Sidebar</span>
+          </div>
+          <div class="col">
+
+            <app-input-check i18n-title title="Use 'slim' sidebar (icons only)" formControlName="slimSidebarEnabled"></app-input-check>
+
+          </div>
+        </div>
+
+        <div class="row mb-3">
+          <div class="col-md-3 col-form-label">
             <span i18n>Dark mode</span>
           </div>
           <div class="col">
             <app-input-check i18n-title title="Use system settings" formControlName="darkModeUseSystem"></app-input-check>
             <app-input-check [hidden]="settingsForm.value.darkModeUseSystem" i18n-title title="Enable dark mode" formControlName="darkModeEnabled"></app-input-check>
             <app-input-check i18n-title title="Invert thumbnails in dark mode" formControlName="darkModeInvertThumbs"></app-input-check>
+          </div>
+        </div>
+
+        <div class="row mb-3">
+          <div class="col-md-3 col-form-label">
+            <span i18n>Theme Color</span>
+          </div>
+          <div class="col col-md-3">
+            <app-input-color i18n-title formControlName="themeColor" [error]="error?.color"></app-input-color>
+          </div>
+          <div class="col-2">
+            <button class="btn btn-link btn-sm pt-2 ps-0" [disabled]="!this.settingsForm.get('themeColor').value" (click)="clearThemeColor()">
+              <svg width="1em" height="1em" viewBox="0 0 16 16" class="bi bi-x me-1" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                <path fill-rule="evenodd" d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/>
+              </svg><ng-container i18n>Reset</ng-container>
+            </button>
+          </div>
+        </div>
+
+        <h4 class="mt-4" id="update-checking" i18n>Update checking</h4>
+
+        <div class="row mb-3">
+          <div class="offset-md-3 col">
+            <p i18n>
+              Update checking works by pinging the the public <a href="https://api.github.com/repos/paperless-ngx/paperless-ngx/releases/latest" target="_blank" rel="noopener noreferrer">Github API</a> for the latest release to determine whether a new version is available.<br/>
+              Actual updating of the app must still be performed manually.
+            </p>
+            <p i18n>
+              <em>No tracking data is collected by the app in any way.</em>
+            </p>
+            <app-input-check i18n-title title="Enable update checking" formControlName="updateCheckingEnabled" i18n-hint hint="Note that for users of third-party containers e.g. linuxserver.io this notification may be 'ahead' of the current third-party release."></app-input-check>
           </div>
         </div>
 
@@ -109,10 +156,18 @@
           </div>
         </div>
 
+        <h4 class="mt-4" i18n>Comments</h4>
+
+        <div class="row mb-3">
+          <div class="offset-md-3 col">
+            <app-input-check i18n-title title="Enable comments" formControlName="commentsEnabled"></app-input-check>
+          </div>
+        </div>
+
       </ng-template>
     </li>
 
-    <li [ngbNavItem]="2">
+    <li [ngbNavItem]="SettingsNavIDs.Notifications">
       <a ngbNavLink i18n>Notifications</a>
       <ng-template ngbNavContent>
 
@@ -130,7 +185,7 @@
       </ng-template>
     </li>
 
-    <li [ngbNavItem]="3">
+    <li [ngbNavItem]="SettingsNavIDs.SavedViews" (mouseover)="maybeInitializeTab(SettingsNavIDs.SavedViews)" (focusin)="maybeInitializeTab(SettingsNavIDs.SavedViews)">
       <a ngbNavLink i18n>Saved views</a>
       <ng-template ngbNavContent>
 
@@ -160,8 +215,97 @@
               </div>
             </div>
 
-            <div *ngIf="savedViews.length == 0" i18n>No saved views defined.</div>
+            <div *ngIf="savedViews && savedViews.length === 0" i18n>No saved views defined.</div>
 
+            <div *ngIf="!savedViews">
+              <div class="spinner-border spinner-border-sm fw-normal ms-2 me-auto" role="status"></div>
+              <div class="visually-hidden" i18n>Loading...</div>
+            </div>
+
+        </div>
+
+      </ng-template>
+    </li>
+
+    <li [ngbNavItem]="SettingsNavIDs.Mail" (mouseover)="maybeInitializeTab(SettingsNavIDs.Mail)" (focusin)="maybeInitializeTab(SettingsNavIDs.Mail)">
+      <a ngbNavLink i18n>Mail</a>
+      <ng-template ngbNavContent>
+
+        <ng-container *ngIf="mailAccounts && mailRules">
+          <h4>
+            <ng-container i18n>Mail accounts</ng-container>
+            <button type="button" class="btn btn-sm btn-primary ms-4" (click)="editMailAccount()">
+              <svg class="sidebaricon me-1" fill="currentColor">
+                <use xlink:href="assets/bootstrap-icons.svg#plus-circle" />
+              </svg>
+              <ng-container i18n>Add Account</ng-container>
+            </button>
+          </h4>
+          <ul class="list-group" formGroupName="mailAccounts">
+
+              <li class="list-group-item">
+                <div class="row">
+                  <div class="col" i18n>Name</div>
+                  <div class="col" i18n>Server</div>
+                  <div class="col" i18n>Actions</div>
+                </div>
+              </li>
+
+              <li *ngFor="let account of mailAccounts" class="list-group-item" [formGroupName]="account.id">
+                <div class="row">
+                  <div class="col d-flex align-items-center"><button class="btn btn-link p-0" type="button" (click)="editMailAccount(account)">{{account.name}}</button></div>
+                  <div class="col d-flex align-items-center">{{account.imap_server}}</div>
+                  <div class="col">
+                    <div class="btn-group">
+                      <button class="btn btn-sm btn-primary" type="button" (click)="editMailAccount(account)" i18n>Edit</button>
+                      <button class="btn btn-sm btn-outline-danger" type="button" (click)="deleteMailAccount(account)" i18n>Delete</button>
+                    </div>
+                  </div>
+                </div>
+              </li>
+
+              <div *ngIf="mailAccounts.length === 0" i18n>No mail accounts defined.</div>
+          </ul>
+
+          <h4 class="mt-4">
+            <ng-container i18n>Mail rules</ng-container>
+            <button type="button" class="btn btn-sm btn-primary ms-4" (click)="editMailRule()">
+              <svg class="sidebaricon me-1" fill="currentColor">
+                <use xlink:href="assets/bootstrap-icons.svg#plus-circle" />
+              </svg>
+              <ng-container i18n>Add Rule</ng-container>
+            </button>
+          </h4>
+          <ul class="list-group" formGroupName="mailRules">
+
+              <li class="list-group-item">
+                <div class="row">
+                  <div class="col" i18n>Name</div>
+                  <div class="col" i18n>Account</div>
+                  <div class="col" i18n>Actions</div>
+                </div>
+              </li>
+
+              <li *ngFor="let rule of mailRules" class="list-group-item" [formGroupName]="rule.id">
+                <div class="row">
+                  <div class="col d-flex align-items-center"><button class="btn btn-link p-0" type="button" (click)="editMailRule(rule)">{{rule.name}}</button></div>
+                  <div class="col d-flex align-items-center">{{(mailAccountService.getCached(rule.account) | async)?.name}}</div>
+                  <div class="col">
+                    <div class="btn-group">
+                      <button class="btn btn-sm btn-primary" type="button" (click)="editMailRule(rule)" i18n>Edit</button>
+                      <button class="btn btn-sm btn-outline-danger" type="button" (click)="deleteMailRule(rule)" i18n>Delete</button>
+                    </div>
+                  </div>
+                </div>
+              </li>
+
+              <div *ngIf="mailRules.length === 0" i18n>No mail rules defined.</div>
+          </ul>
+        </ng-container>
+
+        <div *ngIf="!mailAccounts || !mailRules">
+          <div class="spinner-border spinner-border-sm fw-normal ms-2 me-auto" role="status"></div>
+          <div class="visually-hidden" i18n>Loading...</div>
         </div>
 
       </ng-template>
@@ -170,5 +314,5 @@
 
   <div [ngbNavOutlet]="nav" class="border-start border-end border-bottom p-3 mb-3 shadow-sm"></div>
 
-  <button type="submit" class="btn btn-primary" [disabled]="!(isDirty$ | async)" i18n>Save</button>
+  <button type="submit" class="btn btn-primary mb-2" [disabled]="(isDirty$ | async) === false" i18n>Save</button>
 </form>

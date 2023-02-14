@@ -1,17 +1,32 @@
+import datetime
+import math
 import re
 
+from celery import states
+
+try:
+    import zoneinfo
+except ImportError:
+    import backports.zoneinfo as zoneinfo
 import magic
-import math
+from django.conf import settings
 from django.utils.text import slugify
+from django.utils.translation import gettext as _
 from rest_framework import serializers
 from rest_framework.fields import SerializerMethodField
 
 from . import bulk_edit
-from .models import Correspondent, Tag, Document, DocumentType, \
-    SavedView, SavedViewFilterRule, MatchingModel
+from .models import Correspondent
+from .models import Document
+from .models import DocumentType
+from .models import MatchingModel
+from .models import SavedView
+from .models import SavedViewFilterRule
+from .models import StoragePath
+from .models import Tag
+from .models import UiSettings
+from .models import PaperlessTask
 from .parsers import is_mime_type_supported
-
-from django.utils.translation import gettext as _
 
 
 # https://www.django-rest-framework.org/api-guide/serializers/#example
@@ -23,10 +38,10 @@ class DynamicFieldsModelSerializer(serializers.ModelSerializer):
 
     def __init__(self, *args, **kwargs):
         # Don't pass the 'fields' arg up to the superclass
-        fields = kwargs.pop('fields', None)
+        fields = kwargs.pop("fields", None)
 
         # Instantiate the superclass normally
-        super(DynamicFieldsModelSerializer, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         if fields is not None:
             # Drop any fields that are not specified in the `fields` argument.
@@ -42,16 +57,19 @@ class MatchingModelSerializer(serializers.ModelSerializer):
 
     def get_slug(self, obj):
         return slugify(obj.name)
+
     slug = SerializerMethodField()
 
     def validate_match(self, match):
-        if 'matching_algorithm' in self.initial_data and self.initial_data['matching_algorithm'] == MatchingModel.MATCH_REGEX:  # NOQA: E501
+        if (
+            "matching_algorithm" in self.initial_data
+            and self.initial_data["matching_algorithm"] == MatchingModel.MATCH_REGEX
+        ):
             try:
                 re.compile(match)
-            except Exception as e:
+            except re.error as e:
                 raise serializers.ValidationError(
-                    _("Invalid regular expression: %(error)s") %
-                    {'error': str(e)}
+                    _("Invalid regular expression: %(error)s") % {"error": str(e.msg)},
                 )
         return match
 
@@ -70,12 +88,11 @@ class CorrespondentSerializer(MatchingModelSerializer):
             "matching_algorithm",
             "is_insensitive",
             "document_count",
-            "last_correspondence"
+            "last_correspondence",
         )
 
 
 class DocumentTypeSerializer(MatchingModelSerializer):
-
     class Meta:
         model = DocumentType
         fields = (
@@ -85,7 +102,7 @@ class DocumentTypeSerializer(MatchingModelSerializer):
             "match",
             "matching_algorithm",
             "is_insensitive",
-            "document_count"
+            "document_count",
         )
 
 
@@ -104,7 +121,7 @@ class ColorField(serializers.Field):
         (10, "#6a3d9a"),
         (11, "#b15928"),
         (12, "#000000"),
-        (13, "#cccccc")
+        (13, "#cccccc"),
     )
 
     def to_internal_value(self, data):
@@ -122,7 +139,7 @@ class ColorField(serializers.Field):
 
 class TagSerializerVersion1(MatchingModelSerializer):
 
-    colour = ColorField(source='color', default="#a6cee3")
+    colour = ColorField(source="color", default="#a6cee3")
 
     class Meta:
         model = Tag
@@ -135,20 +152,19 @@ class TagSerializerVersion1(MatchingModelSerializer):
             "matching_algorithm",
             "is_insensitive",
             "is_inbox_tag",
-            "document_count"
+            "document_count",
         )
 
 
 class TagSerializer(MatchingModelSerializer):
-
     def get_text_color(self, obj):
         try:
-            h = obj.color.lstrip('#')
-            rgb = tuple(int(h[i:i + 2], 16)/256 for i in (0, 2, 4))
+            h = obj.color.lstrip("#")
+            rgb = tuple(int(h[i : i + 2], 16) / 256 for i in (0, 2, 4))
             luminance = math.sqrt(
-                0.299 * math.pow(rgb[0], 2) +
-                0.587 * math.pow(rgb[1], 2) +
-                0.114 * math.pow(rgb[2], 2)
+                0.299 * math.pow(rgb[0], 2)
+                + 0.587 * math.pow(rgb[1], 2)
+                + 0.114 * math.pow(rgb[2], 2),
             )
             return "#ffffff" if luminance < 0.53 else "#000000"
         except ValueError:
@@ -168,7 +184,7 @@ class TagSerializer(MatchingModelSerializer):
             "matching_algorithm",
             "is_insensitive",
             "is_inbox_tag",
-            "document_count"
+            "document_count",
         )
 
     def validate_color(self, color):
@@ -193,14 +209,21 @@ class DocumentTypeField(serializers.PrimaryKeyRelatedField):
         return DocumentType.objects.all()
 
 
+class StoragePathField(serializers.PrimaryKeyRelatedField):
+    def get_queryset(self):
+        return StoragePath.objects.all()
+
+
 class DocumentSerializer(DynamicFieldsModelSerializer):
 
     correspondent = CorrespondentField(allow_null=True)
     tags = TagsField(many=True)
     document_type = DocumentTypeField(allow_null=True)
+    storage_path = StoragePathField(allow_null=True)
 
     original_file_name = SerializerMethodField()
     archived_file_name = SerializerMethodField()
+    created_date = serializers.DateField(required=False)
 
     def get_original_file_name(self, obj):
         return obj.get_public_filename()
@@ -211,6 +234,30 @@ class DocumentSerializer(DynamicFieldsModelSerializer):
         else:
             return None
 
+    def to_representation(self, instance):
+        doc = super().to_representation(instance)
+        if self.truncate_content:
+            doc["content"] = doc.get("content")[0:550]
+        return doc
+
+    def update(self, instance, validated_data):
+        if "created_date" in validated_data and "created" not in validated_data:
+            new_datetime = datetime.datetime.combine(
+                validated_data.get("created_date"),
+                datetime.time(0, 0, 0, 0, zoneinfo.ZoneInfo(settings.TIME_ZONE)),
+            )
+            instance.created = new_datetime
+            instance.save()
+        if "created_date" in validated_data:
+            validated_data.pop("created_date")
+        super().update(instance, validated_data)
+        return instance
+
+    def __init__(self, *args, **kwargs):
+        self.truncate_content = kwargs.pop("truncate_content", False)
+
+        super().__init__(*args, **kwargs)
+
     class Meta:
         model = Document
         depth = 1
@@ -218,10 +265,12 @@ class DocumentSerializer(DynamicFieldsModelSerializer):
             "id",
             "correspondent",
             "document_type",
+            "storage_path",
             "title",
             "content",
             "tags",
             "created",
+            "created_date",
             "modified",
             "added",
             "archive_serial_number",
@@ -231,7 +280,6 @@ class DocumentSerializer(DynamicFieldsModelSerializer):
 
 
 class SavedViewFilterRuleSerializer(serializers.ModelSerializer):
-
     class Meta:
         model = SavedViewFilterRule
         fields = ["rule_type", "value"]
@@ -244,28 +292,33 @@ class SavedViewSerializer(serializers.ModelSerializer):
     class Meta:
         model = SavedView
         depth = 1
-        fields = ["id", "name", "show_on_dashboard", "show_in_sidebar",
-                  "sort_field", "sort_reverse", "filter_rules"]
+        fields = [
+            "id",
+            "name",
+            "show_on_dashboard",
+            "show_in_sidebar",
+            "sort_field",
+            "sort_reverse",
+            "filter_rules",
+        ]
 
     def update(self, instance, validated_data):
-        if 'filter_rules' in validated_data:
-            rules_data = validated_data.pop('filter_rules')
+        if "filter_rules" in validated_data:
+            rules_data = validated_data.pop("filter_rules")
         else:
             rules_data = None
-        super(SavedViewSerializer, self).update(instance, validated_data)
+        super().update(instance, validated_data)
         if rules_data is not None:
             SavedViewFilterRule.objects.filter(saved_view=instance).delete()
             for rule_data in rules_data:
-                SavedViewFilterRule.objects.create(
-                    saved_view=instance, **rule_data)
+                SavedViewFilterRule.objects.create(saved_view=instance, **rule_data)
         return instance
 
     def create(self, validated_data):
-        rules_data = validated_data.pop('filter_rules')
+        rules_data = validated_data.pop("filter_rules")
         saved_view = SavedView.objects.create(**validated_data)
         for rule_data in rules_data:
-            SavedViewFilterRule.objects.create(
-                saved_view=saved_view, **rule_data)
+            SavedViewFilterRule.objects.create(saved_view=saved_view, **rule_data)
         return saved_view
 
 
@@ -275,20 +328,19 @@ class DocumentListSerializer(serializers.Serializer):
         required=True,
         label="Documents",
         write_only=True,
-        child=serializers.IntegerField()
+        child=serializers.IntegerField(),
     )
 
     def _validate_document_id_list(self, documents, name="documents"):
         if not type(documents) == list:
             raise serializers.ValidationError(f"{name} must be a list")
         if not all([type(i) == int for i in documents]):
-            raise serializers.ValidationError(
-                f"{name} must be a list of integers")
+            raise serializers.ValidationError(f"{name} must be a list of integers")
         count = Document.objects.filter(id__in=documents).count()
         if not count == len(documents):
             raise serializers.ValidationError(
-                f"Some documents in {name} don't exist or were "
-                f"specified twice.")
+                f"Some documents in {name} don't exist or were " f"specified twice.",
+            )
 
     def validate_documents(self, documents):
         self._validate_document_id_list(documents)
@@ -301,10 +353,12 @@ class BulkEditSerializer(DocumentListSerializer):
         choices=[
             "set_correspondent",
             "set_document_type",
+            "set_storage_path",
             "add_tag",
             "remove_tag",
             "modify_tags",
-            "delete"
+            "delete",
+            "redo_ocr",
         ],
         label="Method",
         write_only=True,
@@ -316,18 +370,20 @@ class BulkEditSerializer(DocumentListSerializer):
         if not type(tags) == list:
             raise serializers.ValidationError(f"{name} must be a list")
         if not all([type(i) == int for i in tags]):
-            raise serializers.ValidationError(
-                f"{name} must be a list of integers")
+            raise serializers.ValidationError(f"{name} must be a list of integers")
         count = Tag.objects.filter(id__in=tags).count()
         if not count == len(tags):
             raise serializers.ValidationError(
-                f"Some tags in {name} don't exist or were specified twice.")
+                f"Some tags in {name} don't exist or were specified twice.",
+            )
 
     def validate_method(self, method):
         if method == "set_correspondent":
             return bulk_edit.set_correspondent
         elif method == "set_document_type":
             return bulk_edit.set_document_type
+        elif method == "set_storage_path":
+            return bulk_edit.set_storage_path
         elif method == "add_tag":
             return bulk_edit.add_tag
         elif method == "remove_tag":
@@ -336,12 +392,14 @@ class BulkEditSerializer(DocumentListSerializer):
             return bulk_edit.modify_tags
         elif method == "delete":
             return bulk_edit.delete
+        elif method == "redo_ocr":
+            return bulk_edit.redo_ocr
         else:
             raise serializers.ValidationError("Unsupported method.")
 
     def _validate_parameters_tags(self, parameters):
-        if 'tag' in parameters:
-            tag_id = parameters['tag']
+        if "tag" in parameters:
+            tag_id = parameters["tag"]
             try:
                 Tag.objects.get(id=tag_id)
             except Tag.DoesNotExist:
@@ -350,48 +408,59 @@ class BulkEditSerializer(DocumentListSerializer):
             raise serializers.ValidationError("tag not specified")
 
     def _validate_parameters_document_type(self, parameters):
-        if 'document_type' in parameters:
-            document_type_id = parameters['document_type']
+        if "document_type" in parameters:
+            document_type_id = parameters["document_type"]
             if document_type_id is None:
                 # None is ok
                 return
             try:
                 DocumentType.objects.get(id=document_type_id)
             except DocumentType.DoesNotExist:
-                raise serializers.ValidationError(
-                    "Document type does not exist")
+                raise serializers.ValidationError("Document type does not exist")
         else:
             raise serializers.ValidationError("document_type not specified")
 
     def _validate_parameters_correspondent(self, parameters):
-        if 'correspondent' in parameters:
-            correspondent_id = parameters['correspondent']
+        if "correspondent" in parameters:
+            correspondent_id = parameters["correspondent"]
             if correspondent_id is None:
                 return
             try:
                 Correspondent.objects.get(id=correspondent_id)
             except Correspondent.DoesNotExist:
-                raise serializers.ValidationError(
-                    "Correspondent does not exist")
+                raise serializers.ValidationError("Correspondent does not exist")
         else:
             raise serializers.ValidationError("correspondent not specified")
 
+    def _validate_storage_path(self, parameters):
+        if "storage_path" in parameters:
+            storage_path_id = parameters["storage_path"]
+            if storage_path_id is None:
+                return
+            try:
+                StoragePath.objects.get(id=storage_path_id)
+            except StoragePath.DoesNotExist:
+                raise serializers.ValidationError(
+                    "Storage path does not exist",
+                )
+        else:
+            raise serializers.ValidationError("storage path not specified")
+
     def _validate_parameters_modify_tags(self, parameters):
         if "add_tags" in parameters:
-            self._validate_tag_id_list(parameters['add_tags'], "add_tags")
+            self._validate_tag_id_list(parameters["add_tags"], "add_tags")
         else:
             raise serializers.ValidationError("add_tags not specified")
 
         if "remove_tags" in parameters:
-            self._validate_tag_id_list(parameters['remove_tags'],
-                                       "remove_tags")
+            self._validate_tag_id_list(parameters["remove_tags"], "remove_tags")
         else:
             raise serializers.ValidationError("remove_tags not specified")
 
     def validate(self, attrs):
 
-        method = attrs['method']
-        parameters = attrs['parameters']
+        method = attrs["method"]
+        parameters = attrs["parameters"]
 
         if method == bulk_edit.set_correspondent:
             self._validate_parameters_correspondent(parameters)
@@ -401,11 +470,20 @@ class BulkEditSerializer(DocumentListSerializer):
             self._validate_parameters_tags(parameters)
         elif method == bulk_edit.modify_tags:
             self._validate_parameters_modify_tags(parameters)
+        elif method == bulk_edit.set_storage_path:
+            self._validate_storage_path(parameters)
 
         return attrs
 
 
 class PostDocumentSerializer(serializers.Serializer):
+
+    created = serializers.DateTimeField(
+        label="Created",
+        allow_null=True,
+        write_only=True,
+        required=False,
+    )
 
     document = serializers.FileField(
         label="Document",
@@ -448,8 +526,7 @@ class PostDocumentSerializer(serializers.Serializer):
 
         if not is_mime_type_supported(mime_type):
             raise serializers.ValidationError(
-                _("File type %(type)s not supported") %
-                {'type': mime_type}
+                _("File type %(type)s not supported") % {"type": mime_type},
             )
 
         return document.name, document_data
@@ -477,12 +554,16 @@ class BulkDownloadSerializer(DocumentListSerializer):
 
     content = serializers.ChoiceField(
         choices=["archive", "originals", "both"],
-        default="archive"
+        default="archive",
     )
 
     compression = serializers.ChoiceField(
         choices=["none", "deflated", "bzip2", "lzma"],
-        default="none"
+        default="none",
+    )
+
+    follow_formatting = serializers.BooleanField(
+        default=False,
     )
 
     def validate_compression(self, compression):
@@ -492,9 +573,143 @@ class BulkDownloadSerializer(DocumentListSerializer):
             "none": zipfile.ZIP_STORED,
             "deflated": zipfile.ZIP_DEFLATED,
             "bzip2": zipfile.ZIP_BZIP2,
-            "lzma": zipfile.ZIP_LZMA
+            "lzma": zipfile.ZIP_LZMA,
         }[compression]
-        
+
+
+class StoragePathSerializer(MatchingModelSerializer):
+    class Meta:
+        model = StoragePath
+        fields = (
+            "id",
+            "slug",
+            "name",
+            "path",
+            "match",
+            "matching_algorithm",
+            "is_insensitive",
+            "document_count",
+        )
+
+    def validate_path(self, path):
+        try:
+            path.format(
+                title="title",
+                correspondent="correspondent",
+                document_type="document_type",
+                created="created",
+                created_year="created_year",
+                created_year_short="created_year_short",
+                created_month="created_month",
+                created_month_name="created_month_name",
+                created_month_name_short="created_month_name_short",
+                created_day="created_day",
+                added="added",
+                added_year="added_year",
+                added_year_short="added_year_short",
+                added_month="added_month",
+                added_month_name="added_month_name",
+                added_month_name_short="added_month_name_short",
+                added_day="added_day",
+                asn="asn",
+                tags="tags",
+                tag_list="tag_list",
+            )
+
+        except (KeyError):
+            raise serializers.ValidationError(_("Invalid variable detected."))
+
+        return path
+
+
+class UiSettingsViewSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UiSettings
+        depth = 1
+        fields = [
+            "id",
+            "settings",
+        ]
+
+    def validate_settings(self, settings):
+        # we never save update checking backend setting
+        if "update_checking" in settings:
+            try:
+                settings["update_checking"].pop("backend_setting")
+            except KeyError:
+                pass
+        return settings
+
+    def create(self, validated_data):
+        ui_settings = UiSettings.objects.update_or_create(
+            user=validated_data.get("user"),
+            defaults={"settings": validated_data.get("settings", None)},
+        )
+        return ui_settings
+
+
+class TasksViewSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PaperlessTask
+        depth = 1
+        fields = (
+            "id",
+            "task_id",
+            "task_file_name",
+            "date_created",
+            "date_done",
+            "type",
+            "status",
+            "result",
+            "acknowledged",
+            "related_document",
+        )
+
+    type = serializers.SerializerMethodField()
+
+    def get_type(self, obj):
+        # just file tasks, for now
+        return "file"
+
+    related_document = serializers.SerializerMethodField()
+    related_doc_re = re.compile(r"New document id (\d+) created")
+
+    def get_related_document(self, obj):
+        result = None
+        if obj.status is not None and obj.status == states.SUCCESS:
+            try:
+                result = self.related_doc_re.search(obj.result).group(1)
+            except Exception:
+                pass
+
+        return result
+
+
+class AcknowledgeTasksViewSerializer(serializers.Serializer):
+
+    tasks = serializers.ListField(
+        required=True,
+        label="Tasks",
+        write_only=True,
+        child=serializers.IntegerField(),
+    )
+
+    def _validate_task_id_list(self, tasks, name="tasks"):
+        pass
+        if not type(tasks) == list:
+            raise serializers.ValidationError(f"{name} must be a list")
+        if not all([type(i) == int for i in tasks]):
+            raise serializers.ValidationError(f"{name} must be a list of integers")
+        count = PaperlessTask.objects.filter(id__in=tasks).count()
+        if not count == len(tasks):
+            raise serializers.ValidationError(
+                f"Some tasks in {name} don't exist or were specified twice.",
+            )
+
+    def validate_tasks(self, tasks):
+        self._validate_task_id_list(tasks)
+        return tasks
+
 
 class DocumentSplitMergePlanSerializer(serializers.Serializer):
     """

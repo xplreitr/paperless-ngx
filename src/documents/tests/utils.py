@@ -3,11 +3,13 @@ import shutil
 import tempfile
 from collections import namedtuple
 from contextlib import contextmanager
+from unittest import mock
 
 from django.apps import apps
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
-from django.test import override_settings, TransactionTestCase
+from django.test import override_settings
+from django.test import TransactionTestCase
 
 
 def setup_directories():
@@ -18,6 +20,7 @@ def setup_directories():
     dirs.scratch_dir = tempfile.mkdtemp()
     dirs.media_dir = tempfile.mkdtemp()
     dirs.consumption_dir = tempfile.mkdtemp()
+    dirs.static_dir = tempfile.mkdtemp()
     dirs.index_dir = os.path.join(dirs.data_dir, "index")
     dirs.originals_dir = os.path.join(dirs.media_dir, "documents", "originals")
     dirs.thumbnail_dir = os.path.join(dirs.media_dir, "documents", "thumbnails")
@@ -41,9 +44,9 @@ def setup_directories():
         CONSUMPTION_DIR=dirs.consumption_dir,
         LOGGING_DIR=dirs.logging_dir,
         INDEX_DIR=dirs.index_dir,
+        STATIC_ROOT=dirs.static_dir,
         MODEL_FILE=os.path.join(dirs.data_dir, "classification_model.pickle"),
-        MEDIA_LOCK=os.path.join(dirs.media_dir, "media.lock")
-
+        MEDIA_LOCK=os.path.join(dirs.media_dir, "media.lock"),
     )
     dirs.settings_override.enable()
 
@@ -55,6 +58,7 @@ def remove_dirs(dirs):
     shutil.rmtree(dirs.data_dir, ignore_errors=True)
     shutil.rmtree(dirs.scratch_dir, ignore_errors=True)
     shutil.rmtree(dirs.consumption_dir, ignore_errors=True)
+    shutil.rmtree(dirs.static_dir, ignore_errors=True)
     dirs.settings_override.disable()
 
 
@@ -70,22 +74,44 @@ def paperless_environment():
 
 
 class DirectoriesMixin:
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.dirs = None
 
     def setUp(self) -> None:
         self.dirs = setup_directories()
-        super(DirectoriesMixin, self).setUp()
+        super().setUp()
 
     def tearDown(self) -> None:
-        super(DirectoriesMixin, self).tearDown()
+        super().tearDown()
         remove_dirs(self.dirs)
 
 
-class TestMigrations(TransactionTestCase):
+class ConsumerProgressMixin:
+    def setUp(self) -> None:
+        self.send_progress_patcher = mock.patch(
+            "documents.consumer.Consumer._send_progress",
+        )
+        self.send_progress_mock = self.send_progress_patcher.start()
+        super().setUp()
 
+    def tearDown(self) -> None:
+        super().tearDown()
+        self.send_progress_patcher.stop()
+
+
+class DocumentConsumeDelayMixin:
+    def setUp(self) -> None:
+        self.consume_file_patcher = mock.patch("documents.tasks.consume_file.delay")
+        self.consume_file_mock = self.consume_file_patcher.start()
+        super().setUp()
+
+    def tearDown(self) -> None:
+        super().tearDown()
+        self.consume_file_patcher.stop()
+
+
+class TestMigrations(TransactionTestCase):
     @property
     def app(self):
         return apps.get_containing_app_config(type(self).__module__).name
@@ -95,10 +121,13 @@ class TestMigrations(TransactionTestCase):
     auto_migrate = True
 
     def setUp(self):
-        super(TestMigrations, self).setUp()
+        super().setUp()
 
-        assert self.migrate_from and self.migrate_to, \
-            "TestCase '{}' must define migrate_from and migrate_to     properties".format(type(self).__name__)
+        assert (
+            self.migrate_from and self.migrate_to
+        ), "TestCase '{}' must define migrate_from and migrate_to     properties".format(
+            type(self).__name__,
+        )
         self.migrate_from = [(self.app, self.migrate_from)]
         self.migrate_to = [(self.app, self.migrate_to)]
         executor = MigrationExecutor(connection)

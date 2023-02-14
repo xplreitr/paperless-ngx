@@ -1,18 +1,35 @@
+import datetime
 import os
 import re
 import shutil
+import stat
 import tempfile
 from unittest import mock
 from unittest.mock import MagicMock
 
-from django.conf import settings
-from django.test import TestCase, override_settings
+from dateutil import tz
 
-from .utils import DirectoriesMixin
-from ..consumer import Consumer, ConsumerError
-from ..models import FileInfo, Tag, Correspondent, DocumentType, Document
-from ..parsers import DocumentParser, ParseError
+try:
+    import zoneinfo
+except ImportError:
+    import backports.zoneinfo as zoneinfo
+
+from django.conf import settings
+from django.utils import timezone
+from django.test import override_settings
+from django.test import TestCase
+
+from ..consumer import Consumer
+from ..consumer import ConsumerError
+from ..models import Correspondent
+from ..models import Document
+from ..models import DocumentType
+from ..models import FileInfo
+from ..models import Tag
+from ..parsers import DocumentParser
+from ..parsers import ParseError
 from ..tasks import sanity_check
+from .utils import DirectoriesMixin
 
 
 class TestAttributes(TestCase):
@@ -29,23 +46,22 @@ class TestAttributes(TestCase):
 
         self.assertEqual(file_info.title, title, filename)
 
-        self.assertEqual(tuple([t.name for t in file_info.tags]), tags, filename)
-
+        self.assertEqual(tuple(t.name for t in file_info.tags), tags, filename)
 
     def test_guess_attributes_from_name_when_title_starts_with_dash(self):
         self._test_guess_attributes_from_name(
-            '- weird but should not break.pdf',
+            "- weird but should not break.pdf",
             None,
-            '- weird but should not break',
-            ()
+            "- weird but should not break",
+            (),
         )
 
     def test_guess_attributes_from_name_when_title_ends_with_dash(self):
         self._test_guess_attributes_from_name(
-            'weird but should not break -.pdf',
+            "weird but should not break -.pdf",
             None,
-            'weird but should not break -',
-            ()
+            "weird but should not break -",
+            (),
         )
 
 
@@ -55,19 +71,18 @@ class TestFieldPermutations(TestCase):
         "20150102030405Z",
         "20150102Z",
     )
-    valid_correspondents = [
-        "timmy",
-        "Dr. McWheelie",
-        "Dash Gor-don",
-        "ο Θερμαστής",
-        ""
-    ]
+    valid_correspondents = ["timmy", "Dr. McWheelie", "Dash Gor-don", "ο Θερμαστής", ""]
     valid_titles = ["title", "Title w Spaces", "Title a-dash", "Τίτλος", ""]
     valid_tags = ["tag", "tig,tag", "tag1,tag2,tag-3"]
 
-    def _test_guessed_attributes(self, filename, created=None,
-                                 correspondent=None, title=None,
-                                 tags=None):
+    def _test_guessed_attributes(
+        self,
+        filename,
+        created=None,
+        correspondent=None,
+        title=None,
+        tags=None,
+    ):
 
         info = FileInfo.from_filename(filename)
 
@@ -92,13 +107,10 @@ class TestFieldPermutations(TestCase):
         if tags is None:
             self.assertEqual(info.tags, (), filename)
         else:
-            self.assertEqual(
-                [t.name for t in info.tags], tags.split(','),
-                filename
-            )
+            self.assertEqual([t.name for t in info.tags], tags.split(","), filename)
 
     def test_just_title(self):
-        template = '{title}.pdf'
+        template = "{title}.pdf"
         for title in self.valid_titles:
             spec = dict(title=title)
             filename = template.format(**spec)
@@ -109,12 +121,8 @@ class TestFieldPermutations(TestCase):
 
         for created in self.valid_dates:
             for title in self.valid_titles:
-                spec = {
-                    "created": created,
-                    "title": title
-                }
-                self._test_guessed_attributes(
-                    template.format(**spec), **spec)
+                spec = {"created": created, "title": title}
+                self._test_guessed_attributes(template.format(**spec), **spec)
 
     def test_invalid_date_format(self):
         info = FileInfo.from_filename("06112017Z - title.pdf")
@@ -127,7 +135,7 @@ class TestFieldPermutations(TestCase):
         all_patt = re.compile("^.*$")
         none_patt = re.compile("$a")
         exact_patt = re.compile("^([a-z0-9,]+)_(\\d{8})_(\\d{6})_([0-9]+)\\.")
-        repl1 = " - \\4 - \\1."    # (empty) corrspondent, title and tags
+        repl1 = " - \\4 - \\1."  # (empty) corrspondent, title and tags
         repl2 = "\\2Z - " + repl1  # creation date + repl1
 
         # No transformations configured (= default)
@@ -137,46 +145,47 @@ class TestFieldPermutations(TestCase):
         self.assertIsNone(info.created)
 
         # Pattern doesn't match (filename unaltered)
-        with self.settings(
-                FILENAME_PARSE_TRANSFORMS=[(none_patt, "none.gif")]):
+        with self.settings(FILENAME_PARSE_TRANSFORMS=[(none_patt, "none.gif")]):
             info = FileInfo.from_filename(filename)
             self.assertEqual(info.title, "tag1,tag2_20190908_180610_0001")
 
         # Simple transformation (match all)
-        with self.settings(
-                FILENAME_PARSE_TRANSFORMS=[(all_patt, "all.gif")]):
+        with self.settings(FILENAME_PARSE_TRANSFORMS=[(all_patt, "all.gif")]):
             info = FileInfo.from_filename(filename)
             self.assertEqual(info.title, "all")
 
         # Multiple transformations configured (first pattern matches)
         with self.settings(
-                FILENAME_PARSE_TRANSFORMS=[
-                    (all_patt, "all.gif"),
-                    (all_patt, "anotherall.gif")]):
+            FILENAME_PARSE_TRANSFORMS=[
+                (all_patt, "all.gif"),
+                (all_patt, "anotherall.gif"),
+            ],
+        ):
             info = FileInfo.from_filename(filename)
             self.assertEqual(info.title, "all")
 
         # Multiple transformations configured (second pattern matches)
         with self.settings(
-                FILENAME_PARSE_TRANSFORMS=[
-                    (none_patt, "none.gif"),
-                    (all_patt, "anotherall.gif")]):
+            FILENAME_PARSE_TRANSFORMS=[
+                (none_patt, "none.gif"),
+                (all_patt, "anotherall.gif"),
+            ],
+        ):
             info = FileInfo.from_filename(filename)
             self.assertEqual(info.title, "anotherall")
 
 
 class DummyParser(DocumentParser):
-
     def get_thumbnail(self, document_path, mime_type, file_name=None):
         # not important during tests
         raise NotImplementedError()
 
     def __init__(self, logging_group, scratch_dir, archive_path):
-        super(DummyParser, self).__init__(logging_group, None)
-        _, self.fake_thumb = tempfile.mkstemp(suffix=".png", dir=scratch_dir)
+        super().__init__(logging_group, None)
+        _, self.fake_thumb = tempfile.mkstemp(suffix=".webp", dir=scratch_dir)
         self.archive_path = archive_path
 
-    def get_optimised_thumbnail(self, document_path, mime_type, file_name=None):
+    def get_thumbnail(self, document_path, mime_type, file_name=None):
         return self.fake_thumb
 
     def parse(self, document_path, mime_type, file_name=None):
@@ -184,16 +193,15 @@ class DummyParser(DocumentParser):
 
 
 class CopyParser(DocumentParser):
+    def get_thumbnail(self, document_path, mime_type, file_name=None):
+        return self.fake_thumb
 
     def get_thumbnail(self, document_path, mime_type, file_name=None):
         return self.fake_thumb
 
-    def get_optimised_thumbnail(self, document_path, mime_type, file_name=None):
-        return self.fake_thumb
-
     def __init__(self, logging_group, progress_callback=None):
-        super(CopyParser, self).__init__(logging_group, progress_callback)
-        _, self.fake_thumb = tempfile.mkstemp(suffix=".png", dir=self.tempdir)
+        super().__init__(logging_group, progress_callback)
+        _, self.fake_thumb = tempfile.mkstemp(suffix=".webp", dir=self.tempdir)
 
     def parse(self, document_path, mime_type, file_name=None):
         self.text = "The text"
@@ -202,16 +210,15 @@ class CopyParser(DocumentParser):
 
 
 class FaultyParser(DocumentParser):
-
     def get_thumbnail(self, document_path, mime_type, file_name=None):
         # not important during tests
         raise NotImplementedError()
 
     def __init__(self, logging_group, scratch_dir):
-        super(FaultyParser, self).__init__(logging_group)
-        _, self.fake_thumb = tempfile.mkstemp(suffix=".png", dir=scratch_dir)
+        super().__init__(logging_group)
+        _, self.fake_thumb = tempfile.mkstemp(suffix=".webp", dir=scratch_dir)
 
-    def get_optimised_thumbnail(self, document_path, mime_type, file_name=None):
+    def get_thumbnail(self, document_path, mime_type, file_name=None):
         return self.fake_thumb
 
     def parse(self, document_path, mime_type, file_name=None):
@@ -225,6 +232,8 @@ def fake_magic_from_file(file, mime=False):
             return "application/pdf"
         elif os.path.splitext(file)[1] == ".png":
             return "image/png"
+        elif os.path.splitext(file)[1] == ".webp":
+            return "image/webp"
         else:
             return "unknown"
     else:
@@ -233,8 +242,15 @@ def fake_magic_from_file(file, mime=False):
 
 @mock.patch("documents.consumer.magic.from_file", fake_magic_from_file)
 class TestConsumer(DirectoriesMixin, TestCase):
-
-    def _assert_first_last_send_progress(self, first_status="STARTING", last_status="SUCCESS", first_progress=0, first_progress_max=100, last_progress=100, last_progress_max=100):
+    def _assert_first_last_send_progress(
+        self,
+        first_status="STARTING",
+        last_status="SUCCESS",
+        first_progress=0,
+        first_progress_max=100,
+        last_progress=100,
+        last_progress_max=100,
+    ):
 
         self._send_progress.assert_called()
 
@@ -243,27 +259,38 @@ class TestConsumer(DirectoriesMixin, TestCase):
         self.assertEqual(args[1], first_progress_max)
         self.assertEqual(args[2], first_status)
 
-        args, kwargs = self._send_progress.call_args_list[len(self._send_progress.call_args_list) - 1]
+        args, kwargs = self._send_progress.call_args_list[
+            len(self._send_progress.call_args_list) - 1
+        ]
         self.assertEqual(args[0], last_progress)
         self.assertEqual(args[1], last_progress_max)
         self.assertEqual(args[2], last_status)
 
     def make_dummy_parser(self, logging_group, progress_callback=None):
-        return DummyParser(logging_group, self.dirs.scratch_dir, self.get_test_archive_file())
+        return DummyParser(
+            logging_group,
+            self.dirs.scratch_dir,
+            self.get_test_archive_file(),
+        )
 
     def make_faulty_parser(self, logging_group, progress_callback=None):
         return FaultyParser(logging_group, self.dirs.scratch_dir)
 
     def setUp(self):
-        super(TestConsumer, self).setUp()
+        super().setUp()
 
         patcher = mock.patch("documents.parsers.document_consumer_declaration.send")
         m = patcher.start()
-        m.return_value = [(None, {
-            "parser": self.make_dummy_parser,
-            "mime_types": {"application/pdf": ".pdf"},
-            "weight": 0
-        })]
+        m.return_value = [
+            (
+                None,
+                {
+                    "parser": self.make_dummy_parser,
+                    "mime_types": {"application/pdf": ".pdf"},
+                    "weight": 0,
+                },
+            ),
+        ]
         self.addCleanup(patcher.stop)
 
         # this prevents websocket message reports during testing.
@@ -274,41 +301,56 @@ class TestConsumer(DirectoriesMixin, TestCase):
         self.consumer = Consumer()
 
     def get_test_file(self):
-        src = os.path.join(os.path.dirname(__file__), "samples", "documents", "originals", "0000001.pdf")
+        src = os.path.join(
+            os.path.dirname(__file__),
+            "samples",
+            "documents",
+            "originals",
+            "0000001.pdf",
+        )
         dst = os.path.join(self.dirs.scratch_dir, "sample.pdf")
         shutil.copy(src, dst)
         return dst
 
     def get_test_archive_file(self):
-        src = os.path.join(os.path.dirname(__file__), "samples", "documents", "archive", "0000001.pdf")
+        src = os.path.join(
+            os.path.dirname(__file__),
+            "samples",
+            "documents",
+            "archive",
+            "0000001.pdf",
+        )
         dst = os.path.join(self.dirs.scratch_dir, "sample_archive.pdf")
         shutil.copy(src, dst)
         return dst
 
-    @override_settings(PAPERLESS_FILENAME_FORMAT=None)
+    @override_settings(FILENAME_FORMAT=None, TIME_ZONE="America/Chicago")
     def testNormalOperation(self):
 
         filename = self.get_test_file()
+
+        # Get the local time, as an aware datetime
+        # Roughly equal to file modification time
+        rough_create_date_local = timezone.localtime(timezone.now())
+
+        # Consume the file
         document = self.consumer.try_consume_file(filename)
 
         self.assertEqual(document.content, "The Text")
-        self.assertEqual(document.title, os.path.splitext(os.path.basename(filename))[0])
+        self.assertEqual(
+            document.title,
+            os.path.splitext(os.path.basename(filename))[0],
+        )
         self.assertIsNone(document.correspondent)
         self.assertIsNone(document.document_type)
         self.assertEqual(document.filename, "0000001.pdf")
         self.assertEqual(document.archive_filename, "0000001.pdf")
 
-        self.assertTrue(os.path.isfile(
-            document.source_path
-        ))
+        self.assertTrue(os.path.isfile(document.source_path))
 
-        self.assertTrue(os.path.isfile(
-            document.thumbnail_path
-        ))
+        self.assertTrue(os.path.isfile(document.thumbnail_path))
 
-        self.assertTrue(os.path.isfile(
-            document.archive_path
-        ))
+        self.assertTrue(os.path.isfile(document.archive_path))
 
         self.assertEqual(document.checksum, "42995833e01aea9b3edee44bbfdd7ce1")
         self.assertEqual(document.archive_checksum, "62acb0bcbfbcaa62ca6ad3668e4e404b")
@@ -317,7 +359,22 @@ class TestConsumer(DirectoriesMixin, TestCase):
 
         self._assert_first_last_send_progress()
 
-    @override_settings(PAPERLESS_FILENAME_FORMAT=None)
+        # Convert UTC time from DB to local time
+        document_date_local = timezone.localtime(document.created)
+
+        self.assertEqual(
+            document_date_local.tzinfo,
+            zoneinfo.ZoneInfo("America/Chicago"),
+        )
+        self.assertEqual(document_date_local.tzinfo, rough_create_date_local.tzinfo)
+        self.assertEqual(document_date_local.year, rough_create_date_local.year)
+        self.assertEqual(document_date_local.month, rough_create_date_local.month)
+        self.assertEqual(document_date_local.day, rough_create_date_local.day)
+        self.assertEqual(document_date_local.hour, rough_create_date_local.hour)
+        self.assertEqual(document_date_local.minute, rough_create_date_local.minute)
+        # Skipping seconds and more precise
+
+    @override_settings(FILENAME_FORMAT=None)
     def testDeleteMacFiles(self):
         # https://github.com/jonaswinkler/paperless-ng/discussions/1037
 
@@ -330,40 +387,49 @@ class TestConsumer(DirectoriesMixin, TestCase):
 
         document = self.consumer.try_consume_file(filename)
 
-        self.assertTrue(os.path.isfile(
-            document.source_path
-        ))
+        self.assertTrue(os.path.isfile(document.source_path))
 
         self.assertFalse(os.path.isfile(shadow_file))
         self.assertFalse(os.path.isfile(filename))
-
 
     def testOverrideFilename(self):
         filename = self.get_test_file()
         override_filename = "Statement for November.pdf"
 
-        document = self.consumer.try_consume_file(filename, override_filename=override_filename)
+        document = self.consumer.try_consume_file(
+            filename,
+            override_filename=override_filename,
+        )
 
         self.assertEqual(document.title, "Statement for November")
 
         self._assert_first_last_send_progress()
 
     def testOverrideTitle(self):
-        document = self.consumer.try_consume_file(self.get_test_file(), override_title="Override Title")
+        document = self.consumer.try_consume_file(
+            self.get_test_file(),
+            override_title="Override Title",
+        )
         self.assertEqual(document.title, "Override Title")
         self._assert_first_last_send_progress()
 
     def testOverrideCorrespondent(self):
         c = Correspondent.objects.create(name="test")
 
-        document = self.consumer.try_consume_file(self.get_test_file(), override_correspondent_id=c.pk)
+        document = self.consumer.try_consume_file(
+            self.get_test_file(),
+            override_correspondent_id=c.pk,
+        )
         self.assertEqual(document.correspondent.id, c.id)
         self._assert_first_last_send_progress()
 
     def testOverrideDocumentType(self):
         dt = DocumentType.objects.create(name="test")
 
-        document = self.consumer.try_consume_file(self.get_test_file(), override_document_type_id=dt.pk)
+        document = self.consumer.try_consume_file(
+            self.get_test_file(),
+            override_document_type_id=dt.pk,
+        )
         self.assertEqual(document.document_type.id, dt.id)
         self._assert_first_last_send_progress()
 
@@ -371,7 +437,10 @@ class TestConsumer(DirectoriesMixin, TestCase):
         t1 = Tag.objects.create(name="t1")
         t2 = Tag.objects.create(name="t2")
         t3 = Tag.objects.create(name="t3")
-        document = self.consumer.try_consume_file(self.get_test_file(), override_tag_ids=[t1.id, t3.id])
+        document = self.consumer.try_consume_file(
+            self.get_test_file(),
+            override_tag_ids=[t1.id, t3.id],
+        )
 
         self.assertIn(t1, document.tags.all())
         self.assertNotIn(t2, document.tags.all())
@@ -384,7 +453,7 @@ class TestConsumer(DirectoriesMixin, TestCase):
             ConsumerError,
             "File not found",
             self.consumer.try_consume_file,
-            "non-existing-file"
+            "non-existing-file",
         )
 
         self._assert_first_last_send_progress(last_status="FAILED")
@@ -396,7 +465,7 @@ class TestConsumer(DirectoriesMixin, TestCase):
             ConsumerError,
             "It is a duplicate",
             self.consumer.try_consume_file,
-            self.get_test_file()
+            self.get_test_file(),
         )
 
         self._assert_first_last_send_progress(last_status="FAILED")
@@ -408,7 +477,7 @@ class TestConsumer(DirectoriesMixin, TestCase):
             ConsumerError,
             "It is a duplicate",
             self.consumer.try_consume_file,
-            self.get_test_archive_file()
+            self.get_test_archive_file(),
         )
 
         self._assert_first_last_send_progress(last_status="FAILED")
@@ -425,25 +494,29 @@ class TestConsumer(DirectoriesMixin, TestCase):
             ConsumerError,
             "sample.pdf: Unsupported mime type application/pdf",
             self.consumer.try_consume_file,
-            self.get_test_file()
+            self.get_test_file(),
         )
 
         self._assert_first_last_send_progress(last_status="FAILED")
 
-
     @mock.patch("documents.parsers.document_consumer_declaration.send")
     def testFaultyParser(self, m):
-        m.return_value = [(None, {
-            "parser": self.make_faulty_parser,
-            "mime_types": {"application/pdf": ".pdf"},
-            "weight": 0
-        })]
+        m.return_value = [
+            (
+                None,
+                {
+                    "parser": self.make_faulty_parser,
+                    "mime_types": {"application/pdf": ".pdf"},
+                    "weight": 0,
+                },
+            ),
+        ]
 
         self.assertRaisesMessage(
             ConsumerError,
             "sample.pdf: Error while consuming document sample.pdf: Does not compute.",
             self.consumer.try_consume_file,
-            self.get_test_file()
+            self.get_test_file(),
         )
 
         self._assert_first_last_send_progress(last_status="FAILED")
@@ -455,9 +528,9 @@ class TestConsumer(DirectoriesMixin, TestCase):
 
         self.assertRaisesMessage(
             ConsumerError,
-            "sample.pdf: The following error occured while consuming sample.pdf: NO.",
+            "sample.pdf: The following error occurred while consuming sample.pdf: NO.",
             self.consumer.try_consume_file,
-            filename
+            filename,
         )
 
         self._assert_first_last_send_progress(last_status="FAILED")
@@ -468,7 +541,7 @@ class TestConsumer(DirectoriesMixin, TestCase):
         # Database empty
         self.assertEqual(len(Document.objects.all()), 0)
 
-    @override_settings(PAPERLESS_FILENAME_FORMAT="{correspondent}/{title}")
+    @override_settings(FILENAME_FORMAT="{correspondent}/{title}")
     def testFilenameHandling(self):
         filename = self.get_test_file()
 
@@ -480,7 +553,7 @@ class TestConsumer(DirectoriesMixin, TestCase):
 
         self._assert_first_last_send_progress()
 
-    @override_settings(PAPERLESS_FILENAME_FORMAT="{correspondent}/{title}")
+    @override_settings(FILENAME_FORMAT="{correspondent}/{title}")
     @mock.patch("documents.signals.handlers.generate_unique_filename")
     def testFilenameHandlingUnstableFormat(self, m):
 
@@ -491,7 +564,7 @@ class TestConsumer(DirectoriesMixin, TestCase):
             filenames.insert(0, f)
             return f
 
-        m.side_effect = lambda f, archive_filename = False: get_filename()
+        m.side_effect = lambda f, archive_filename=False: get_filename()
 
         filename = self.get_test_file()
 
@@ -562,20 +635,40 @@ class TestConsumer(DirectoriesMixin, TestCase):
 
         self._assert_first_last_send_progress(last_status="FAILED")
 
-    @override_settings(PAPERLESS_FILENAME_FORMAT="{title}")
+    @override_settings(FILENAME_FORMAT="{title}")
     @mock.patch("documents.parsers.document_consumer_declaration.send")
     def test_similar_filenames(self, m):
-        shutil.copy(os.path.join(os.path.dirname(__file__), "samples", "simple.pdf"), os.path.join(settings.CONSUMPTION_DIR, "simple.pdf"))
-        shutil.copy(os.path.join(os.path.dirname(__file__), "samples", "simple.png"), os.path.join(settings.CONSUMPTION_DIR, "simple.png"))
-        shutil.copy(os.path.join(os.path.dirname(__file__), "samples", "simple-noalpha.png"), os.path.join(settings.CONSUMPTION_DIR, "simple.png.pdf"))
-        m.return_value = [(None, {
-            "parser": CopyParser,
-            "mime_types": {"application/pdf": ".pdf", "image/png": ".png"},
-            "weight": 0
-        })]
-        doc1 = self.consumer.try_consume_file(os.path.join(settings.CONSUMPTION_DIR, "simple.png"))
-        doc2 = self.consumer.try_consume_file(os.path.join(settings.CONSUMPTION_DIR, "simple.pdf"))
-        doc3 = self.consumer.try_consume_file(os.path.join(settings.CONSUMPTION_DIR, "simple.png.pdf"))
+        shutil.copy(
+            os.path.join(os.path.dirname(__file__), "samples", "simple.pdf"),
+            os.path.join(settings.CONSUMPTION_DIR, "simple.pdf"),
+        )
+        shutil.copy(
+            os.path.join(os.path.dirname(__file__), "samples", "simple.png"),
+            os.path.join(settings.CONSUMPTION_DIR, "simple.png"),
+        )
+        shutil.copy(
+            os.path.join(os.path.dirname(__file__), "samples", "simple-noalpha.png"),
+            os.path.join(settings.CONSUMPTION_DIR, "simple.png.pdf"),
+        )
+        m.return_value = [
+            (
+                None,
+                {
+                    "parser": CopyParser,
+                    "mime_types": {"application/pdf": ".pdf", "image/png": ".png"},
+                    "weight": 0,
+                },
+            ),
+        ]
+        doc1 = self.consumer.try_consume_file(
+            os.path.join(settings.CONSUMPTION_DIR, "simple.png"),
+        )
+        doc2 = self.consumer.try_consume_file(
+            os.path.join(settings.CONSUMPTION_DIR, "simple.pdf"),
+        )
+        doc3 = self.consumer.try_consume_file(
+            os.path.join(settings.CONSUMPTION_DIR, "simple.png.pdf"),
+        )
 
         self.assertEqual(doc1.filename, "simple.png")
         self.assertEqual(doc1.archive_filename, "simple.pdf")
@@ -587,9 +680,138 @@ class TestConsumer(DirectoriesMixin, TestCase):
         sanity_check()
 
 
-class PreConsumeTestCase(TestCase):
+@mock.patch("documents.consumer.magic.from_file", fake_magic_from_file)
+class TestConsumerCreatedDate(DirectoriesMixin, TestCase):
+    def setUp(self):
+        super().setUp()
 
-    @mock.patch("documents.consumer.Popen")
+        # this prevents websocket message reports during testing.
+        patcher = mock.patch("documents.consumer.Consumer._send_progress")
+        self._send_progress = patcher.start()
+        self.addCleanup(patcher.stop)
+
+        self.consumer = Consumer()
+
+    def test_consume_date_from_content(self):
+        """
+        GIVEN:
+            - File content with date in DMY (default) format
+
+        THEN:
+            - Should parse the date from the file content
+        """
+        src = os.path.join(
+            os.path.dirname(__file__),
+            "samples",
+            "documents",
+            "originals",
+            "0000005.pdf",
+        )
+        dst = os.path.join(self.dirs.scratch_dir, "sample.pdf")
+        shutil.copy(src, dst)
+
+        document = self.consumer.try_consume_file(dst)
+
+        self.assertEqual(
+            document.created,
+            datetime.datetime(1996, 2, 20, tzinfo=tz.gettz(settings.TIME_ZONE)),
+        )
+
+    @override_settings(FILENAME_DATE_ORDER="YMD")
+    def test_consume_date_from_filename(self):
+        """
+        GIVEN:
+            - File content with date in DMY (default) format
+            - Filename with date in YMD format
+
+        THEN:
+            - Should parse the date from the filename
+        """
+        src = os.path.join(
+            os.path.dirname(__file__),
+            "samples",
+            "documents",
+            "originals",
+            "0000005.pdf",
+        )
+        dst = os.path.join(self.dirs.scratch_dir, "Scan - 2022-02-01.pdf")
+        shutil.copy(src, dst)
+
+        document = self.consumer.try_consume_file(dst)
+
+        self.assertEqual(
+            document.created,
+            datetime.datetime(2022, 2, 1, tzinfo=tz.gettz(settings.TIME_ZONE)),
+        )
+
+    def test_consume_date_filename_date_use_content(self):
+        """
+        GIVEN:
+            - File content with date in DMY (default) format
+            - Filename date parsing disabled
+            - Filename with date in YMD format
+
+        THEN:
+            - Should parse the date from the content
+        """
+        src = os.path.join(
+            os.path.dirname(__file__),
+            "samples",
+            "documents",
+            "originals",
+            "0000005.pdf",
+        )
+        dst = os.path.join(self.dirs.scratch_dir, "Scan - 2022-02-01.pdf")
+        shutil.copy(src, dst)
+
+        document = self.consumer.try_consume_file(dst)
+
+        self.assertEqual(
+            document.created,
+            datetime.datetime(1996, 2, 20, tzinfo=tz.gettz(settings.TIME_ZONE)),
+        )
+
+    @override_settings(
+        IGNORE_DATES=(datetime.date(2010, 12, 13), datetime.date(2011, 11, 12)),
+    )
+    def test_consume_date_use_content_with_ignore(self):
+        """
+        GIVEN:
+            - File content with dates in DMY (default) format
+            - File content includes ignored dates
+
+        THEN:
+            - Should parse the date from the filename
+        """
+        src = os.path.join(
+            os.path.dirname(__file__),
+            "samples",
+            "documents",
+            "originals",
+            "0000006.pdf",
+        )
+        dst = os.path.join(self.dirs.scratch_dir, "0000006.pdf")
+        shutil.copy(src, dst)
+
+        document = self.consumer.try_consume_file(dst)
+
+        self.assertEqual(
+            document.created,
+            datetime.datetime(1997, 2, 20, tzinfo=tz.gettz(settings.TIME_ZONE)),
+        )
+
+
+class PreConsumeTestCase(TestCase):
+    def setUp(self) -> None:
+
+        # this prevents websocket message reports during testing.
+        patcher = mock.patch("documents.consumer.Consumer._send_progress")
+        self._send_progress = patcher.start()
+        self.addCleanup(patcher.stop)
+
+        return super().setUp()
+
+    @mock.patch("documents.consumer.run")
     @override_settings(PRE_CONSUME_SCRIPT=None)
     def test_no_pre_consume_script(self, m):
         c = Consumer()
@@ -597,7 +819,7 @@ class PreConsumeTestCase(TestCase):
         c.run_pre_consume_script()
         m.assert_not_called()
 
-    @mock.patch("documents.consumer.Popen")
+    @mock.patch("documents.consumer.run")
     @mock.patch("documents.consumer.Consumer._send_progress")
     @override_settings(PRE_CONSUME_SCRIPT="does-not-exist")
     def test_pre_consume_script_not_found(self, m, m2):
@@ -606,27 +828,98 @@ class PreConsumeTestCase(TestCase):
         c.path = "path-to-file"
         self.assertRaises(ConsumerError, c.run_pre_consume_script)
 
-    @mock.patch("documents.consumer.Popen")
+    @mock.patch("documents.consumer.run")
     def test_pre_consume_script(self, m):
         with tempfile.NamedTemporaryFile() as script:
             with override_settings(PRE_CONSUME_SCRIPT=script.name):
                 c = Consumer()
-                c.path = "path-to-file"
+                c.original_path = "path-to-file"
+                c.path = "/tmp/somewhere/path-to-file"
                 c.run_pre_consume_script()
 
                 m.assert_called_once()
 
                 args, kwargs = m.call_args
 
-                command = args[0]
+                command = kwargs["args"]
+                environment = kwargs["env"]
 
                 self.assertEqual(command[0], script.name)
                 self.assertEqual(command[1], "path-to-file")
 
+                subset = {
+                    "DOCUMENT_SOURCE_PATH": c.original_path,
+                    "DOCUMENT_WORKING_PATH": c.path,
+                }
+                self.assertDictEqual(environment, {**environment, **subset})
+
+    @mock.patch("documents.consumer.Consumer.log")
+    def test_script_with_output(self, mocked_log):
+        """
+        GIVEN:
+            - A script which outputs to stdout and stderr
+        WHEN:
+            - The script is executed as a consume script
+        THEN:
+            - The script's outputs are logged
+        """
+        with tempfile.NamedTemporaryFile(mode="w") as script:
+            # Write up a little script
+            with script.file as outfile:
+                outfile.write("#!/usr/bin/env bash\n")
+                outfile.write("echo This message goes to stdout\n")
+                outfile.write("echo This message goes to stderr >&2")
+
+            # Make the file executable
+            st = os.stat(script.name)
+            os.chmod(script.name, st.st_mode | stat.S_IEXEC)
+
+            with override_settings(PRE_CONSUME_SCRIPT=script.name):
+                c = Consumer()
+                c.path = "path-to-file"
+                c.run_pre_consume_script()
+
+                mocked_log.assert_called()
+
+                mocked_log.assert_any_call("info", "This message goes to stdout")
+                mocked_log.assert_any_call("warning", "This message goes to stderr")
+
+    def test_script_exit_non_zero(self):
+        """
+        GIVEN:
+            - A script which exits with a non-zero exit code
+        WHEN:
+            - The script is executed as a pre-consume script
+        THEN:
+            - A ConsumerError is raised
+        """
+        with tempfile.NamedTemporaryFile(mode="w") as script:
+            # Write up a little script
+            with script.file as outfile:
+                outfile.write("#!/usr/bin/env bash\n")
+                outfile.write("exit 100\n")
+
+            # Make the file executable
+            st = os.stat(script.name)
+            os.chmod(script.name, st.st_mode | stat.S_IEXEC)
+
+            with override_settings(PRE_CONSUME_SCRIPT=script.name):
+                c = Consumer()
+                c.path = "path-to-file"
+                self.assertRaises(ConsumerError, c.run_pre_consume_script)
+
 
 class PostConsumeTestCase(TestCase):
+    def setUp(self) -> None:
 
-    @mock.patch("documents.consumer.Popen")
+        # this prevents websocket message reports during testing.
+        patcher = mock.patch("documents.consumer.Consumer._send_progress")
+        self._send_progress = patcher.start()
+        self.addCleanup(patcher.stop)
+
+        return super().setUp()
+
+    @mock.patch("documents.consumer.run")
     @override_settings(POST_CONSUME_SCRIPT=None)
     def test_no_post_consume_script(self, m):
         doc = Document.objects.create(title="Test", mime_type="application/pdf")
@@ -647,7 +940,7 @@ class PostConsumeTestCase(TestCase):
         c.filename = "somefile.pdf"
         self.assertRaises(ConsumerError, c.run_post_consume_script, doc)
 
-    @mock.patch("documents.consumer.Popen")
+    @mock.patch("documents.consumer.run")
     def test_post_consume_script_simple(self, m):
         with tempfile.NamedTemporaryFile() as script:
             with override_settings(POST_CONSUME_SCRIPT=script.name):
@@ -657,12 +950,16 @@ class PostConsumeTestCase(TestCase):
 
                 m.assert_called_once()
 
-    @mock.patch("documents.consumer.Popen")
+    @mock.patch("documents.consumer.run")
     def test_post_consume_script_with_correspondent(self, m):
         with tempfile.NamedTemporaryFile() as script:
             with override_settings(POST_CONSUME_SCRIPT=script.name):
                 c = Correspondent.objects.create(name="my_bank")
-                doc = Document.objects.create(title="Test", mime_type="application/pdf", correspondent=c)
+                doc = Document.objects.create(
+                    title="Test",
+                    mime_type="application/pdf",
+                    correspondent=c,
+                )
                 tag1 = Tag.objects.create(name="a")
                 tag2 = Tag.objects.create(name="b")
                 doc.tags.add(tag1)
@@ -672,9 +969,10 @@ class PostConsumeTestCase(TestCase):
 
                 m.assert_called_once()
 
-                args, kwargs = m.call_args
+                _, kwargs = m.call_args
 
-                command = args[0]
+                command = kwargs["args"]
+                environment = kwargs["env"]
 
                 self.assertEqual(command[0], script.name)
                 self.assertEqual(command[1], str(doc.pk))
@@ -682,3 +980,39 @@ class PostConsumeTestCase(TestCase):
                 self.assertEqual(command[6], f"/api/documents/{doc.pk}/thumb/")
                 self.assertEqual(command[7], "my_bank")
                 self.assertCountEqual(command[8].split(","), ["a", "b"])
+
+                subset = {
+                    "DOCUMENT_ID": str(doc.pk),
+                    "DOCUMENT_DOWNLOAD_URL": f"/api/documents/{doc.pk}/download/",
+                    "DOCUMENT_THUMBNAIL_URL": f"/api/documents/{doc.pk}/thumb/",
+                    "DOCUMENT_CORRESPONDENT": "my_bank",
+                    "DOCUMENT_TAGS": "a,b",
+                }
+
+                self.assertDictEqual(environment, {**environment, **subset})
+
+    def test_script_exit_non_zero(self):
+        """
+        GIVEN:
+            - A script which exits with a non-zero exit code
+        WHEN:
+            - The script is executed as a post-consume script
+        THEN:
+            - A ConsumerError is raised
+        """
+        with tempfile.NamedTemporaryFile(mode="w") as script:
+            # Write up a little script
+            with script.file as outfile:
+                outfile.write("#!/usr/bin/env bash\n")
+                outfile.write("exit -500\n")
+
+            # Make the file executable
+            st = os.stat(script.name)
+            os.chmod(script.name, st.st_mode | stat.S_IEXEC)
+
+            with override_settings(POST_CONSUME_SCRIPT=script.name):
+                c = Consumer()
+                doc = Document.objects.create(title="Test", mime_type="application/pdf")
+                c.path = "path-to-file"
+                with self.assertRaises(ConsumerError):
+                    c.run_post_consume_script(doc)

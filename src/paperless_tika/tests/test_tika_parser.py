@@ -3,14 +3,14 @@ import os
 from pathlib import Path
 from unittest import mock
 
+from django.test import override_settings
 from django.test import TestCase
-from requests import Response
-
+from documents.parsers import ParseError
 from paperless_tika.parsers import TikaDocumentParser
+from requests import Response
 
 
 class TestTikaParser(TestCase):
-
     def setUp(self) -> None:
         self.parser = TikaDocumentParser(logging_group=None)
 
@@ -22,9 +22,7 @@ class TestTikaParser(TestCase):
     def test_parse(self, post, from_file):
         from_file.return_value = {
             "content": "the content",
-            "metadata": {
-                "Creation-Date": "2020-11-21"
-            }
+            "metadata": {"Creation-Date": "2020-11-21"},
         }
         response = Response()
         response._content = b"PDF document"
@@ -45,16 +43,76 @@ class TestTikaParser(TestCase):
     @mock.patch("paperless_tika.parsers.parser.from_file")
     def test_metadata(self, from_file):
         from_file.return_value = {
-            "metadata": {
-                "Creation-Date": "2020-11-21",
-                "Some-key": "value"
-            }
+            "metadata": {"Creation-Date": "2020-11-21", "Some-key": "value"},
         }
 
         file = os.path.join(self.parser.tempdir, "input.odt")
         Path(file).touch()
 
-        metadata = self.parser.extract_metadata(file, "application/vnd.oasis.opendocument.text")
+        metadata = self.parser.extract_metadata(
+            file,
+            "application/vnd.oasis.opendocument.text",
+        )
 
-        self.assertTrue("Creation-Date" in [m['key'] for m in metadata])
-        self.assertTrue("Some-key" in [m['key'] for m in metadata])
+        self.assertTrue("Creation-Date" in [m["key"] for m in metadata])
+        self.assertTrue("Some-key" in [m["key"] for m in metadata])
+
+    @mock.patch("paperless_tika.parsers.parser.from_file")
+    @mock.patch("paperless_tika.parsers.requests.post")
+    def test_convert_failure(self, post, from_file):
+        """
+        GIVEN:
+            - Document needs to be converted to PDF
+        WHEN:
+            - Gotenberg server returns an error
+        THEN:
+            - Parse error is raised
+        """
+        from_file.return_value = {
+            "content": "the content",
+            "metadata": {"Creation-Date": "2020-11-21"},
+        }
+        response = Response()
+        response._content = b"PDF document"
+        response.status_code = 500
+        post.return_value = response
+
+        file = os.path.join(self.parser.tempdir, "input.odt")
+        Path(file).touch()
+
+        with self.assertRaises(ParseError):
+            self.parser.convert_to_pdf(file, None)
+
+    @mock.patch("paperless_tika.parsers.requests.post")
+    def test_request_pdf_a_format(self, post: mock.Mock):
+        """
+        GIVEN:
+            - Document needs to be converted to PDF
+        WHEN:
+            - Specific PDF/A format requested
+        THEN:
+            - Request to Gotenberg contains the expected PDF/A format string
+        """
+        file = os.path.join(self.parser.tempdir, "input.odt")
+        Path(file).touch()
+
+        response = Response()
+        response._content = b"PDF document"
+        response.status_code = 200
+        post.return_value = response
+
+        for setting, expected_key in [
+            ("pdfa", "PDF/A-2b"),
+            ("pdfa-2", "PDF/A-2b"),
+            ("pdfa-1", "PDF/A-1a"),
+            ("pdfa-3", "PDF/A-3b"),
+        ]:
+            with override_settings(OCR_OUTPUT_TYPE=setting):
+                self.parser.convert_to_pdf(file, None)
+
+                post.assert_called_once()
+                _, kwargs = post.call_args
+
+                self.assertEqual(kwargs["data"]["pdfFormat"], expected_key)
+
+                post.reset_mock()

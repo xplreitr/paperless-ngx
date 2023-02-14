@@ -4,25 +4,44 @@ from unittest import mock
 from django.conf import settings
 from django.test import TestCase
 from django.utils import timezone
-
 from documents import tasks
-from documents.models import Document, Tag, Correspondent, DocumentType
-from documents.sanity_checker import SanityCheckMessages, SanityCheckFailedException
+from documents.models import Correspondent
+from documents.models import Document
+from documents.models import DocumentType
+from documents.models import Tag
+from documents.sanity_checker import SanityCheckFailedException
+from documents.sanity_checker import SanityCheckMessages
+from documents.tests.test_classifier import dummy_preprocess
 from documents.tests.utils import DirectoriesMixin
 
 
-class TestTasks(DirectoriesMixin, TestCase):
-
+class TestIndexReindex(DirectoriesMixin, TestCase):
     def test_index_reindex(self):
-        Document.objects.create(title="test", content="my document", checksum="wow", added=timezone.now(), created=timezone.now(), modified=timezone.now())
+        Document.objects.create(
+            title="test",
+            content="my document",
+            checksum="wow",
+            added=timezone.now(),
+            created=timezone.now(),
+            modified=timezone.now(),
+        )
 
         tasks.index_reindex()
 
     def test_index_optimize(self):
-        Document.objects.create(title="test", content="my document", checksum="wow", added=timezone.now(), created=timezone.now(), modified=timezone.now())
+        Document.objects.create(
+            title="test",
+            content="my document",
+            checksum="wow",
+            added=timezone.now(),
+            created=timezone.now(),
+            modified=timezone.now(),
+        )
 
         tasks.index_optimize()
 
+
+class TestClassifier(DirectoriesMixin, TestCase):
     @mock.patch("documents.tasks.load_classifier")
     def test_train_classifier_no_auto_matching(self, load_classifier):
         tasks.train_classifier()
@@ -57,22 +76,29 @@ class TestTasks(DirectoriesMixin, TestCase):
         doc = Document.objects.create(correspondent=c, content="test", title="test")
         self.assertFalse(os.path.isfile(settings.MODEL_FILE))
 
-        tasks.train_classifier()
-        self.assertTrue(os.path.isfile(settings.MODEL_FILE))
-        mtime = os.stat(settings.MODEL_FILE).st_mtime
+        with mock.patch(
+            "documents.classifier.DocumentClassifier.preprocess_content",
+        ) as pre_proc_mock:
+            pre_proc_mock.side_effect = dummy_preprocess
 
-        tasks.train_classifier()
-        self.assertTrue(os.path.isfile(settings.MODEL_FILE))
-        mtime2 = os.stat(settings.MODEL_FILE).st_mtime
-        self.assertEqual(mtime, mtime2)
+            tasks.train_classifier()
+            self.assertTrue(os.path.isfile(settings.MODEL_FILE))
+            mtime = os.stat(settings.MODEL_FILE).st_mtime
 
-        doc.content = "test2"
-        doc.save()
-        tasks.train_classifier()
-        self.assertTrue(os.path.isfile(settings.MODEL_FILE))
-        mtime3 = os.stat(settings.MODEL_FILE).st_mtime
-        self.assertNotEqual(mtime2, mtime3)
+            tasks.train_classifier()
+            self.assertTrue(os.path.isfile(settings.MODEL_FILE))
+            mtime2 = os.stat(settings.MODEL_FILE).st_mtime
+            self.assertEqual(mtime, mtime2)
 
+            doc.content = "test2"
+            doc.save()
+            tasks.train_classifier()
+            self.assertTrue(os.path.isfile(settings.MODEL_FILE))
+            mtime3 = os.stat(settings.MODEL_FILE).st_mtime
+            self.assertNotEqual(mtime2, mtime3)
+
+
+class TestSanityCheck(DirectoriesMixin, TestCase):
     @mock.patch("documents.tasks.sanity_checker.check_sanity")
     def test_sanity_check_success(self, m):
         m.return_value = SanityCheckMessages()
@@ -82,7 +108,7 @@ class TestTasks(DirectoriesMixin, TestCase):
     @mock.patch("documents.tasks.sanity_checker.check_sanity")
     def test_sanity_check_error(self, m):
         messages = SanityCheckMessages()
-        messages.error("Some error")
+        messages.error(None, "Some error")
         m.return_value = messages
         self.assertRaises(SanityCheckFailedException, tasks.sanity_check)
         m.assert_called_once()
@@ -90,21 +116,35 @@ class TestTasks(DirectoriesMixin, TestCase):
     @mock.patch("documents.tasks.sanity_checker.check_sanity")
     def test_sanity_check_warning(self, m):
         messages = SanityCheckMessages()
-        messages.warning("Some warning")
+        messages.warning(None, "Some warning")
         m.return_value = messages
-        self.assertEqual(tasks.sanity_check(), "Sanity check exited with warnings. See log.")
+        self.assertEqual(
+            tasks.sanity_check(),
+            "Sanity check exited with warnings. See log.",
+        )
         m.assert_called_once()
 
     @mock.patch("documents.tasks.sanity_checker.check_sanity")
     def test_sanity_check_info(self, m):
         messages = SanityCheckMessages()
-        messages.info("Some info")
+        messages.info(None, "Some info")
         m.return_value = messages
-        self.assertEqual(tasks.sanity_check(), "Sanity check exited with infos. See log.")
+        self.assertEqual(
+            tasks.sanity_check(),
+            "Sanity check exited with infos. See log.",
+        )
         m.assert_called_once()
 
+
+class TestBulkUpdate(DirectoriesMixin, TestCase):
     def test_bulk_update_documents(self):
-        doc1 = Document.objects.create(title="test", content="my document", checksum="wow", added=timezone.now(),
-                                created=timezone.now(), modified=timezone.now())
+        doc1 = Document.objects.create(
+            title="test",
+            content="my document",
+            checksum="wow",
+            added=timezone.now(),
+            created=timezone.now(),
+            modified=timezone.now(),
+        )
 
         tasks.bulk_update_documents([doc1.pk])

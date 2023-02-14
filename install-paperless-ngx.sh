@@ -1,18 +1,18 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 ask() {
 	while true ; do
 		if [[ -z $3 ]] ; then
-			read -p "$1 [$2]: " result
+			read -r -p "$1 [$2]: " result
 		else
-			read -p "$1 ($3) [$2]: " result
+			read -r -p "$1 ($3) [$2]: " result
 		fi
 		if [[ -z $result ]]; then
 			ask_result=$2
 			return
 		fi
 		array=$3
-		if [[ -z $3 || " ${array[@]} " =~ " ${result} " ]]; then
+		if [[ -z $3 || " ${array[*]} " =~ ${result} ]]; then
 			ask_result=$result
 			return
 		else
@@ -24,7 +24,7 @@ ask() {
 ask_docker_folder() {
 	while true ; do
 
-		read -p "$1 [$2]: " result
+		read -r -p "$1 [$2]: " result
 
 		if [[ -z $result ]]; then
 			ask_result=$2
@@ -47,25 +47,29 @@ if [[ $(id -u) == "0" ]] ; then
 	exit 1
 fi
 
-if [[ -z $(which wget) ]] ; then
+if ! command -v wget &> /dev/null ; then
 	echo "wget executable not found. Is wget installed?"
 	exit 1
 fi
 
-if [[ -z $(which docker) ]] ; then
+if ! command -v docker &> /dev/null ; then
 	echo "docker executable not found. Is docker installed?"
 	exit 1
 fi
 
-if [[ -z $(which docker-compose) ]] ; then
-	echo "docker-compose executable not found. Is docker-compose installed?"
-	exit 1
+DOCKER_COMPOSE_CMD="docker-compose"
+if ! command -v ${DOCKER_COMPOSE_CMD} ; then
+	if docker compose version &> /dev/null ; then
+		DOCKER_COMPOSE_CMD="docker compose"
+	else
+		echo "docker-compose executable not found. Is docker-compose installed?"
+		exit 1
+	fi
 fi
 
 # Check if user has permissions to run Docker by trying to get the status of Docker (docker status).
 # If this fails, the user probably does not have permissions for Docker.
-docker stats --no-stream 2>/dev/null 1>&2
-if [ $? -ne 0 ] ; then
+if ! docker stats --no-stream &> /dev/null ; then
 	echo ""
 	echo "WARN: It look like the current user does not have Docker permissions."
 	echo "WARN: Use 'sudo usermod -aG docker $USER' to assign Docker permissions to the user."
@@ -85,59 +89,17 @@ echo ""
 echo "This script will download, configure and start paperless-ngx."
 
 echo ""
-echo "1. Folder configuration"
-echo "======================="
-echo ""
-echo "The target folder is used to store the configuration files of "
-echo "paperless. You can move this folder around after installing paperless."
-echo "You will need this folder whenever you want to start, stop, update or "
-echo "maintain your paperless instance."
-echo ""
-
-ask "Target folder" "$(pwd)/paperless-ngx"
-TARGET_FOLDER=$ask_result
-
-echo ""
-echo "The consume folder is where paperles will search for new documents."
-echo "Point this to a folder where your scanner is able to put your scanned"
-echo "documents."
-echo ""
-echo "CAUTION: You must specify an absolute path starting with / or a relative "
-echo "path starting with ./ here. Examples:"
-echo "  /mnt/consume"
-echo "  ./consume"
-echo ""
-
-ask_docker_folder "Consume folder" "$TARGET_FOLDER/consume"
-CONSUME_FOLDER=$ask_result
-
-echo ""
-echo "The media folder is where paperless stores your documents."
-echo "Leave empty and docker will manage this folder for you."
-echo "Docker usually stores managed folders in /var/lib/docker/volumes."
-echo ""
-echo "CAUTION: If specified, you must specify an absolute path starting with /"
-echo "or a relative path starting with ./ here."
-echo ""
-
-ask_docker_folder "Media folder" ""
-MEDIA_FOLDER=$ask_result
-
-echo ""
-echo "The data folder is where paperless stores other data, such as your"
-echo "SQLite database (if used), the search index and other data."
-echo "As with the media folder, leave empty to have this managed by docker."
-echo ""
-echo "CAUTION: If specified, you must specify an absolute path starting with /"
-echo "or a relative path starting with ./ here."
-echo ""
-
-ask_docker_folder "Data folder" ""
-DATA_FOLDER=$ask_result
-
-echo ""
-echo "2. Application configuration"
+echo "1. Application configuration"
 echo "============================"
+
+echo ""
+echo "The URL paperless will be available at. This is required if the"
+echo "installation will be accessible via the web, otherwise can be left blank."
+echo "Example: https://paperless.example.com"
+echo ""
+
+ask "URL" ""
+URL=$ask_result
 
 echo ""
 echo "The port on which the paperless webserver will listen for incoming"
@@ -151,18 +113,20 @@ echo ""
 echo "Paperless requires you to configure the current time zone correctly."
 echo "Otherwise, the dates of your documents may appear off by one day,"
 echo "depending on where you are on earth."
+echo "Example: Europe/Berlin"
+echo "See here for a list: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones"
 echo ""
 
 ask "Current time zone" "$default_time_zone"
 TIME_ZONE=$ask_result
 
 echo ""
-echo "Database backend: PostgreSQL and SQLite are available. Use PostgreSQL"
+echo "Database backend: PostgreSQL, MariaDB, and SQLite are available. Use PostgreSQL"
 echo "if unsure. If you're running on a low-power device such as Raspberry"
 echo "Pi, use SQLite to save resources."
 echo ""
 
-ask "Database backend" "postgres" "postgres sqlite"
+ask "Database backend" "postgres" "postgres sqlite mariadb"
 DATABASE_BACKEND=$ask_result
 
 echo ""
@@ -200,6 +164,73 @@ ask "Group ID" "$(id -g)"
 USERMAP_GID=$ask_result
 
 echo ""
+echo "2. Folder configuration"
+echo "======================="
+echo ""
+echo "The target folder is used to store the configuration files of "
+echo "paperless. You can move this folder around after installing paperless."
+echo "You will need this folder whenever you want to start, stop, update or "
+echo "maintain your paperless instance."
+echo ""
+
+ask "Target folder" "$(pwd)/paperless-ngx"
+TARGET_FOLDER=$ask_result
+
+echo ""
+echo "The consume folder is where paperless will search for new documents."
+echo "Point this to a folder where your scanner is able to put your scanned"
+echo "documents."
+echo ""
+echo "CAUTION: You must specify an absolute path starting with / or a relative "
+echo "path starting with ./ here. Examples:"
+echo "  /mnt/consume"
+echo "  ./consume"
+echo ""
+
+ask_docker_folder "Consume folder" "$TARGET_FOLDER/consume"
+CONSUME_FOLDER=$ask_result
+
+echo ""
+echo "The media folder is where paperless stores your documents."
+echo "Leave empty and docker will manage this folder for you."
+echo "Docker usually stores managed folders in /var/lib/docker/volumes."
+echo ""
+echo "CAUTION: If specified, you must specify an absolute path starting with /"
+echo "or a relative path starting with ./ here."
+echo ""
+
+ask_docker_folder "Media folder" ""
+MEDIA_FOLDER=$ask_result
+
+echo ""
+echo "The data folder is where paperless stores other data, such as your"
+if [[ "$DATABASE_BACKEND" == "sqlite" ]] ; then
+	echo -n "SQLite database, the "
+fi
+echo "search index and other data."
+echo "As with the media folder, leave empty to have this managed by docker."
+echo ""
+echo "CAUTION: If specified, you must specify an absolute path starting with /"
+echo "or a relative path starting with ./ here."
+echo ""
+
+ask_docker_folder "Data folder" ""
+DATA_FOLDER=$ask_result
+
+if [[ "$DATABASE_BACKEND" == "postgres" || "$DATABASE_BACKEND" == "mariadb" ]] ; then
+	echo ""
+	echo "The database folder, where your database stores its data."
+	echo "Leave empty to have this managed by docker."
+	echo ""
+	echo "CAUTION: If specified, you must specify an absolute path starting with /"
+	echo "or a relative path starting with ./ here."
+	echo ""
+
+	ask_docker_folder "Database folder" ""
+	DATABASE_FOLDER=$ask_result
+fi
+
+echo ""
 echo "3. Login credentials"
 echo "===================="
 echo ""
@@ -212,7 +243,7 @@ ask "Paperless username" "$(whoami)"
 USERNAME=$ask_result
 
 while true; do
-	read -sp "Paperless password: " PASSWORD
+	read -r -sp "Paperless password: " PASSWORD
 	echo ""
 
 	if [[ -z $PASSWORD ]] ; then
@@ -220,7 +251,7 @@ while true; do
 		continue
 	fi
 
-	read -sp "Paperless password (again): " PASSWORD_REPEAT
+	read -r -sp "Paperless password (again): " PASSWORD_REPEAT
 	echo ""
 
 	if [[ ! "$PASSWORD" == "$PASSWORD_REPEAT" ]] ; then
@@ -250,7 +281,16 @@ if [[ -z $DATA_FOLDER ]] ; then
 else
 	echo "Data folder: $DATA_FOLDER"
 fi
+if [[ "$DATABASE_BACKEND" == "postgres" || "$DATABASE_BACKEND" == "mariadb" ]] ; then
+	if [[ -z $DATABASE_FOLDER ]] ; then
+		echo "Database folder: Managed by docker"
+	else
+		echo "Database folder: $DATABASE_FOLDER"
+	fi
+fi
+
 echo ""
+echo "URL: $URL"
 echo "Port: $PORT"
 echo "Database: $DATABASE_BACKEND"
 echo "Tika enabled: $TIKA_ENABLED"
@@ -262,7 +302,7 @@ echo "Paperless username: $USERNAME"
 echo "Paperless email: $EMAIL"
 
 echo ""
-read -p "Press any key to install."
+read -r -p "Press any key to install."
 
 echo ""
 echo "Installing paperless..."
@@ -278,14 +318,20 @@ if [[ $TIKA_ENABLED == "yes" ]] ; then
 	DOCKER_COMPOSE_VERSION="$DOCKER_COMPOSE_VERSION-tika"
 fi
 
-wget "https://raw.githubusercontent.com/paperless-ngx/paperless-ngx/master/docker/compose/docker-compose.$DOCKER_COMPOSE_VERSION.yml" -O docker-compose.yml
-wget "https://raw.githubusercontent.com/paperless-ngx/paperless-ngx/master/docker/compose/.env" -O .env
+wget "https://raw.githubusercontent.com/paperless-ngx/paperless-ngx/main/docker/compose/docker-compose.$DOCKER_COMPOSE_VERSION.yml" -O docker-compose.yml
+wget "https://raw.githubusercontent.com/paperless-ngx/paperless-ngx/main/docker/compose/.env" -O .env
 
-SECRET_KEY=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 64 | head -n 1)
+SECRET_KEY=$(tr -dc 'a-zA-Z0-9' < /dev/urandom | fold -w 64 | head -n 1)
 
-DEFAULT_LANGUAGES="deu eng fra ita spa"
+DEFAULT_LANGUAGES=("deu eng fra ita spa")
+
+_split_langs="${OCR_LANGUAGE//+/ }"
+read -r -a OCR_LANGUAGES_ARRAY <<< "${_split_langs}"
 
 {
+	if [[ ! $URL == "" ]] ; then
+		echo "PAPERLESS_URL=$URL"
+	fi
 	if [[ ! $USERMAP_UID == "1000" ]] ; then
 		echo "USERMAP_UID=$USERMAP_UID"
 	fi
@@ -295,25 +341,49 @@ DEFAULT_LANGUAGES="deu eng fra ita spa"
 	echo "PAPERLESS_TIME_ZONE=$TIME_ZONE"
 	echo "PAPERLESS_OCR_LANGUAGE=$OCR_LANGUAGE"
 	echo "PAPERLESS_SECRET_KEY=$SECRET_KEY"
-	if [[ ! " ${DEFAULT_LANGUAGES[@]} " =~ " ${OCR_LANGUAGE} " ]] ; then
-		echo "PAPERLESS_OCR_LANGUAGES=$OCR_LANGUAGE"
+	if [[ ! ${DEFAULT_LANGUAGES[*]} =~ ${OCR_LANGUAGES_ARRAY[*]} ]] ; then
+		echo "PAPERLESS_OCR_LANGUAGES=${OCR_LANGUAGES_ARRAY[*]}"
 	fi
 } > docker-compose.env
 
-sed -i "s/- 8000:8000/- $PORT:8000/g" docker-compose.yml
+sed -i "s/- \"8000:8000\"/- \"$PORT:8000\"/g" docker-compose.yml
 
 sed -i "s#- \./consume:/usr/src/paperless/consume#- $CONSUME_FOLDER:/usr/src/paperless/consume#g" docker-compose.yml
 
 if [[ -n $MEDIA_FOLDER ]] ; then
 	sed -i "s#- media:/usr/src/paperless/media#- $MEDIA_FOLDER:/usr/src/paperless/media#g" docker-compose.yml
+	sed -i "/^\s*media:/d" docker-compose.yml
 fi
 
 if [[ -n $DATA_FOLDER ]] ; then
 	sed -i "s#- data:/usr/src/paperless/data#- $DATA_FOLDER:/usr/src/paperless/data#g" docker-compose.yml
+	sed -i "/^\s*data:/d" docker-compose.yml
 fi
 
-docker-compose pull
+# If the database folder was provided (not blank), replace the pgdata/dbdata volume with a bind mount
+# of the provided folder
+if [[ -n $DATABASE_FOLDER ]] ; then
+	if [[ "$DATABASE_BACKEND" == "postgres" ]] ; then
+		sed -i "s#- pgdata:/var/lib/postgresql/data#- $DATABASE_FOLDER:/var/lib/postgresql/data#g" docker-compose.yml
+		sed -i "/^\s*pgdata:/d" docker-compose.yml
+	elif [[ "$DATABASE_BACKEND" == "mariadb" ]]; then
+		sed -i "s#- dbdata:/var/lib/mysql#- $DATABASE_FOLDER:/var/lib/mysql#g" docker-compose.yml
+		sed -i "/^\s*dbdata:/d" docker-compose.yml
+	fi
+fi
 
-docker-compose run --rm -e DJANGO_SUPERUSER_PASSWORD="$PASSWORD" webserver createsuperuser --noinput --username "$USERNAME" --email "$EMAIL"
+# remove trailing blank lines from end of file
+sed -i -e :a -e '/^\n*$/{$d;N;};/\n$/ba' docker-compose.yml
+# if last line in file contains "volumes:", remove that line since no more named volumes are left
+l1=$(grep -n '^volumes:' docker-compose.yml | cut -d : -f 1)  # get line number containing volume: at begin of line
+l2=$(wc -l < docker-compose.yml)  # get total number of lines
+if [ "$l1" -eq "$l2" ] ; then
+	sed -i "/^volumes:/d" docker-compose.yml
+fi
 
-docker-compose up -d
+
+${DOCKER_COMPOSE_CMD} pull
+
+${DOCKER_COMPOSE_CMD} run --rm -e DJANGO_SUPERUSER_PASSWORD="$PASSWORD" webserver createsuperuser --noinput --username "$USERNAME" --email "$EMAIL"
+
+${DOCKER_COMPOSE_CMD} up --detach

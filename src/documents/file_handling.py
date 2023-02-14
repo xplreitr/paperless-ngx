@@ -1,4 +1,3 @@
-import datetime
 import logging
 import os
 from collections import defaultdict
@@ -6,13 +5,13 @@ from collections import defaultdict
 import pathvalidate
 from django.conf import settings
 from django.template.defaultfilters import slugify
+from django.utils import timezone
 
 
 logger = logging.getLogger("paperless.filehandling")
 
 
 class defaultdictNoStr(defaultdict):
-
     def __str__(self):
         raise ValueError("Don't use {tags} directly.")
 
@@ -63,24 +62,23 @@ def many_to_dictionary(field):
         mydictionary[index] = slugify(t.name)
 
         # Find delimiter
-        delimiter = t.name.find('_')
+        delimiter = t.name.find("_")
 
         if delimiter == -1:
-            delimiter = t.name.find('-')
+            delimiter = t.name.find("-")
 
         if delimiter == -1:
             continue
 
         key = t.name[:delimiter]
-        value = t.name[delimiter + 1:]
+        value = t.name[delimiter + 1 :]
 
         mydictionary[slugify(key)] = slugify(value)
 
     return mydictionary
 
 
-def generate_unique_filename(doc,
-                             archive_filename=False):
+def generate_unique_filename(doc, archive_filename=False):
     """
     Generates a unique filename for doc in settings.ORIGINALS_DIR.
 
@@ -104,14 +102,19 @@ def generate_unique_filename(doc,
 
     if archive_filename and doc.filename:
         new_filename = os.path.splitext(doc.filename)[0] + ".pdf"
-        if new_filename == old_filename or not os.path.exists(os.path.join(root, new_filename)):  # NOQA: E501
+        if new_filename == old_filename or not os.path.exists(
+            os.path.join(root, new_filename),
+        ):
             return new_filename
 
     counter = 0
 
     while True:
         new_filename = generate_filename(
-            doc, counter, archive_filename=archive_filename)
+            doc,
+            counter,
+            archive_filename=archive_filename,
+        )
         if new_filename == old_filename:
             # still the same as before.
             return new_filename
@@ -124,62 +127,89 @@ def generate_unique_filename(doc,
 
 def generate_filename(doc, counter=0, append_gpg=True, archive_filename=False):
     path = ""
+    filename_format = settings.FILENAME_FORMAT
 
     try:
-        if settings.PAPERLESS_FILENAME_FORMAT is not None:
-            tags = defaultdictNoStr(lambda: slugify(None),
-                                    many_to_dictionary(doc.tags))
+        if doc.storage_path is not None:
+            logger.debug(
+                f"Document has storage_path {doc.storage_path.id} "
+                f"({doc.storage_path.path}) set",
+            )
+            filename_format = doc.storage_path.path
+
+        if filename_format is not None:
+            tags = defaultdictNoStr(
+                lambda: slugify(None),
+                many_to_dictionary(doc.tags),
+            )
 
             tag_list = pathvalidate.sanitize_filename(
-                ",".join(sorted(
-                    [tag.name for tag in doc.tags.all()]
-                )),
-                replacement_text="-"
+                ",".join(
+                    sorted(tag.name for tag in doc.tags.all()),
+                ),
+                replacement_text="-",
             )
 
             if doc.correspondent:
                 correspondent = pathvalidate.sanitize_filename(
-                    doc.correspondent.name, replacement_text="-"
+                    doc.correspondent.name,
+                    replacement_text="-",
                 )
             else:
-                correspondent = "none"
+                correspondent = "-none-"
 
             if doc.document_type:
                 document_type = pathvalidate.sanitize_filename(
-                    doc.document_type.name, replacement_text="-"
+                    doc.document_type.name,
+                    replacement_text="-",
                 )
             else:
-                document_type = "none"
+                document_type = "-none-"
 
             if doc.archive_serial_number:
                 asn = str(doc.archive_serial_number)
             else:
-                asn = "none"
+                asn = "-none-"
 
-            path = settings.PAPERLESS_FILENAME_FORMAT.format(
-                title=pathvalidate.sanitize_filename(
-                    doc.title, replacement_text="-"),
+            # Convert UTC database datetime to localized date
+            local_added = timezone.localdate(doc.added)
+            local_created = timezone.localdate(doc.created)
+
+            path = filename_format.format(
+                title=pathvalidate.sanitize_filename(doc.title, replacement_text="-"),
                 correspondent=correspondent,
                 document_type=document_type,
-                created=datetime.date.isoformat(doc.created),
-                created_year=doc.created.year if doc.created else "none",
-                created_month=f"{doc.created.month:02}" if doc.created else "none",  # NOQA: E501
-                created_day=f"{doc.created.day:02}" if doc.created else "none",
-                added=datetime.date.isoformat(doc.added),
-                added_year=doc.added.year if doc.added else "none",
-                added_month=f"{doc.added.month:02}" if doc.added else "none",
-                added_day=f"{doc.added.day:02}" if doc.added else "none",
+                created=local_created.isoformat(),
+                created_year=local_created.strftime("%Y"),
+                created_year_short=local_created.strftime("%y"),
+                created_month=local_created.strftime("%m"),
+                created_month_name=local_created.strftime("%B"),
+                created_month_name_short=local_created.strftime("%b"),
+                created_day=local_created.strftime("%d"),
+                added=local_added.isoformat(),
+                added_year=local_added.strftime("%Y"),
+                added_year_short=local_added.strftime("%y"),
+                added_month=local_added.strftime("%m"),
+                added_month_name=local_added.strftime("%B"),
+                added_month_name_short=local_added.strftime("%b"),
+                added_day=local_added.strftime("%d"),
                 asn=asn,
                 tags=tags,
-                tag_list=tag_list
+                tag_list=tag_list,
             ).strip()
 
+            if settings.FILENAME_FORMAT_REMOVE_NONE:
+                path = path.replace("-none-/", "")  # remove empty directories
+                path = path.replace(" -none-", "")  # remove when spaced, with space
+                path = path.replace("-none-", "")  # remove rest of the occurences
+
+            path = path.replace("-none-", "none")  # backward compatibility
             path = path.strip(os.sep)
 
     except (ValueError, KeyError, IndexError):
         logger.warning(
-            f"Invalid PAPERLESS_FILENAME_FORMAT: "
-            f"{settings.PAPERLESS_FILENAME_FORMAT}, falling back to default")
+            f"Invalid filename_format '{filename_format}', falling back to default",
+        )
 
     counter_str = f"_{counter:02}" if counter else ""
 

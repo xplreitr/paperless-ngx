@@ -1,7 +1,6 @@
-# docker-compose file for running paperless from the Docker Hub.
+# docker-compose file for running paperless from the docker container registry.
 # This file contains everything paperless needs to run.
 # Paperless supports amd64, arm and arm64 hardware.
-#
 # All compose files of paperless configure paperless in the following way:
 #
 # - Paperless is (re)started on system boot, if it was running before shutdown.
@@ -34,20 +33,22 @@
 version: "3.4"
 services:
   broker:
-    image: redis:6.0
+    image: docker.io/library/redis:7
     restart: unless-stopped
+    volumes:
+      - redisdata:/data
 
   webserver:
-    image: jonaswinkler/paperless-ng:latest
+    image: ghcr.io/paperless-ngx/paperless-ngx:latest
     restart: unless-stopped
     depends_on:
       - broker
       - gotenberg
       - tika
     ports:
-      - 8000:8000
+      - "8000:8000"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000"]
+      test: ["CMD", "curl", "-fs", "-S", "--max-time", "2", "http://localhost:8000"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -64,15 +65,21 @@ services:
       PAPERLESS_TIKA_ENDPOINT: http://tika:9998
 
   gotenberg:
-    image: gotenberg/gotenberg:7
+    image: docker.io/gotenberg/gotenberg:7.6
     restart: unless-stopped
-    environment:
-      CHROMIUM_DISABLE_ROUTES: 1
+
+    # The gotenberg chromium route is used to convert .eml files. We do not
+    # want to allow external content like tracking pixels or even javascript.
+    command:
+      - "gotenberg"
+      - "--chromium-disable-javascript=true"
+      - "--chromium-allow-list=file:///tmp/.*"
 
   tika:
-    image: apache/tika
+    image: ghcr.io/paperless-ngx/tika:latest
     restart: unless-stopped
 
 volumes:
   data:
   media:
+  redisdata:

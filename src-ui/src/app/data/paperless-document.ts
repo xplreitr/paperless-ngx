@@ -3,54 +3,58 @@ import { ObjectWithId } from './object-with-id'
 import { PaperlessTag } from './paperless-tag'
 import { PaperlessDocumentType } from './paperless-document-type'
 import { Observable } from 'rxjs'
+import { PaperlessStoragePath } from './paperless-storage-path'
 
 export interface SearchHit {
-
   score?: number
   rank?: number
 
   highlights?: string
-
+  comment_highlights?: string
 }
 
 export interface PaperlessDocument extends ObjectWithId {
+  correspondent$?: Observable<PaperlessCorrespondent>
 
-    correspondent$?: Observable<PaperlessCorrespondent>
+  correspondent?: number
 
-    correspondent?: number
+  document_type$?: Observable<PaperlessDocumentType>
 
-    document_type$?: Observable<PaperlessDocumentType>
+  document_type?: number
 
-    document_type?: number
+  storage_path$?: Observable<PaperlessStoragePath>
 
-    title?: string
+  storage_path?: number
 
-    content?: string
+  title?: string
 
-    file_type?: string
+  content?: string
 
-    tags$?: Observable<PaperlessTag[]>
+  tags$?: Observable<PaperlessTag[]>
 
-    tags?: number[]
+  tags?: number[]
 
-    checksum?: string
+  checksum?: string
 
-    created?: Date
+  // UTC
+  created?: Date
 
-    modified?: Date
+  // localized date
+  created_date?: Date
 
-    added?: Date
+  modified?: Date
 
-    file_name?: string
+  added?: Date
 
-    download_url?: string
+  original_file_name?: string
 
-    thumbnail_url?: string
+  download_url?: string
 
-    archive_serial_number?: number
+  thumbnail_url?: string
 
-    __search_hit__?: SearchHit
+  archive_serial_number?: number
 
+  __search_hit__?: SearchHit
 }
 
 export interface PaperlessDocumentPart extends PaperlessDocument {

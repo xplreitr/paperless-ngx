@@ -1,5 +1,4 @@
 from django.apps import AppConfig
-
 from django.utils.translation import gettext_lazy as _
 
 
@@ -17,13 +16,15 @@ class DocumentsConfig(AppConfig):
             set_correspondent,
             set_document_type,
             set_tags,
-            add_to_index
+            set_storage_path,
+            add_to_index,
         )
 
         document_consumption_finished.connect(add_inbox_tags)
         document_consumption_finished.connect(set_correspondent)
         document_consumption_finished.connect(set_document_type)
         document_consumption_finished.connect(set_tags)
+        document_consumption_finished.connect(set_storage_path)
         document_consumption_finished.connect(set_log_entry)
         document_consumption_finished.connect(add_to_index)
 

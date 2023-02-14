@@ -1,5 +1,5 @@
 # Have a look at the docs for documentation.
-# https://paperless-ng.readthedocs.io/en/latest/configuration.html
+# https://docs.paperless-ngx.com/configuration/
 
 # Debug. Only enable this for development.
 
@@ -23,12 +23,15 @@
 #PAPERLESS_MEDIA_ROOT=../media
 #PAPERLESS_STATICDIR=../static
 #PAPERLESS_FILENAME_FORMAT=
+#PAPERLESS_FILENAME_FORMAT_REMOVE_NONE=
 
 # Security and hosting
 
 #PAPERLESS_SECRET_KEY=change-me
-#PAPERLESS_ALLOWED_HOSTS=example.com,www.example.com
-#PAPERLESS_CORS_ALLOWED_HOSTS=http://example.com,http://localhost:8000
+#PAPERLESS_URL=https://example.com
+#PAPERLESS_CSRF_TRUSTED_ORIGINS=https://example.com # can be set using PAPERLESS_URL
+#PAPERLESS_ALLOWED_HOSTS=example.com,www.example.com # can be set using PAPERLESS_URL
+#PAPERLESS_CORS_ALLOWED_HOSTS=https://localhost:8080,https://example.com # can be set using PAPERLESS_URL
 #PAPERLESS_FORCE_SCRIPT_NAME=
 #PAPERLESS_STATIC_URL=/static/
 #PAPERLESS_AUTO_LOGIN_USERNAME=
@@ -58,15 +61,18 @@
 #PAPERLESS_CONSUMER_POLLING=10
 #PAPERLESS_CONSUMER_DELETE_DUPLICATES=false
 #PAPERLESS_CONSUMER_RECURSIVE=false
-#PAPERLESS_CONSUMER_IGNORE_PATTERNS=[".DS_STORE/*", "._*", ".stfolder/*"]
+#PAPERLESS_CONSUMER_IGNORE_PATTERNS=[".DS_STORE/*", "._*", ".stfolder/*", ".stversions/*", ".localized/*", "desktop.ini"]
 #PAPERLESS_CONSUMER_SUBDIRS_AS_TAGS=false
-#PAPERLESS_OPTIMIZE_THUMBNAILS=true
+#PAPERLESS_CONSUMER_ENABLE_BARCODES=false
+#PAPERLESS_CONSUMER_BARCODE_STRING=PATCHT
 #PAPERLESS_PRE_CONSUME_SCRIPT=/path/to/an/arbitrary/script.sh
 #PAPERLESS_POST_CONSUME_SCRIPT=/path/to/an/arbitrary/script.sh
 #PAPERLESS_FILENAME_DATE_ORDER=YMD
 #PAPERLESS_FILENAME_PARSE_TRANSFORMS=[]
+#PAPERLESS_NUMBER_OF_SUGGESTED_DATES=5
 #PAPERLESS_THUMBNAIL_FONT_NAME=
 #PAPERLESS_IGNORE_DATES=
+#PAPERLESS_ENABLE_UPDATE_CHECK=
 
 # Tika settings
 
@@ -78,4 +84,3 @@
 
 #PAPERLESS_CONVERT_BINARY=/usr/bin/convert
 #PAPERLESS_GS_BINARY=/usr/bin/gs
-#PAPERLESS_OPTIPNG_BINARY=/usr/bin/optipng
