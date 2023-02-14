@@ -2953,30 +2953,64 @@ class TestBulkDownload(DirectoriesMixin, APITestCase):
 
 
 class TestSplitMerge(DirectoriesMixin, APITestCase):
-
     def setUp(self):
-        super(TestSplitMerge, self).setUp()
+        super().setUp()
 
         user = User.objects.create_superuser(username="temp_admin")
         self.client.force_login(user=user)
 
-        self.doc1 = Document.objects.create(title="document A", filename="docA.pdf", mime_type="application/pdf", checksum="A")
-        self.doc2 = Document.objects.create(title="document B", filename="docB.jpg", mime_type="image/jpeg", checksum="B", archive_filename="docB.pdf", archive_checksum="D")
-        self.doc3 = Document.objects.create(title="document C", filename="docC.jpg", mime_type="image/jpeg", checksum="C")
+        self.doc1 = Document.objects.create(
+            title="document A",
+            filename="docA.pdf",
+            mime_type="application/pdf",
+            checksum="A",
+        )
+        self.doc2 = Document.objects.create(
+            title="document B",
+            filename="docB.jpg",
+            mime_type="image/jpeg",
+            checksum="B",
+            archive_filename="docB.pdf",
+            archive_checksum="D",
+        )
+        self.doc3 = Document.objects.create(
+            title="document C",
+            filename="docC.jpg",
+            mime_type="image/jpeg",
+            checksum="C",
+        )
 
-        shutil.copy(os.path.join(os.path.dirname(__file__), "samples", "simple.pdf"), self.doc1.source_path)
-        shutil.copy(os.path.join(os.path.dirname(__file__), "samples", "simple.jpg"), self.doc2.source_path)
-        shutil.copy(os.path.join(os.path.dirname(__file__), "samples", "simple.pdf"), self.doc2.archive_path)
-        shutil.copy(os.path.join(os.path.dirname(__file__), "samples", "simple.jpg"), self.doc3.source_path)
+        shutil.copy(
+            os.path.join(os.path.dirname(__file__), "samples", "simple.pdf"),
+            self.doc1.source_path,
+        )
+        shutil.copy(
+            os.path.join(os.path.dirname(__file__), "samples", "simple.jpg"),
+            self.doc2.source_path,
+        )
+        shutil.copy(
+            os.path.join(os.path.dirname(__file__), "samples", "simple.pdf"),
+            self.doc2.archive_path,
+        )
+        shutil.copy(
+            os.path.join(os.path.dirname(__file__), "samples", "simple.jpg"),
+            self.doc3.source_path,
+        )
 
     @mock.patch("documents.merge.async_task")
     def test_merge(self, m):
-        result = self.client.post("/api/split_merge/", json.dumps({
-            "split_merge_plan": [
-                [{"document": self.doc1.pk}, {"document": self.doc2.pk}]
-            ],
-            "preview": False
-        }), content_type="application/json")
+        result = self.client.post(
+            "/api/split_merge/",
+            json.dumps(
+                {
+                    "split_merge_plan": [
+                        [{"document": self.doc1.pk}, {"document": self.doc2.pk}],
+                    ],
+                    "preview": False,
+                },
+            ),
+            content_type="application/json",
+        )
         self.assertEqual(result.status_code, 200)
         m.assert_called_once()
         args, kwargs = m.call_args
@@ -2996,26 +3030,41 @@ class TestSplitMerge(DirectoriesMixin, APITestCase):
 
     @mock.patch("documents.merge.async_task")
     def test_merge_delete_source(self, m):
-        result = self.client.post("/api/split_merge/", json.dumps({
-            "split_merge_plan": [
-                [{"document": self.doc1.pk}, {"document": self.doc2.pk}]
-            ],
-            "preview": False,
-            "delete_source": True
-        }), content_type="application/json")
+        result = self.client.post(
+            "/api/split_merge/",
+            json.dumps(
+                {
+                    "split_merge_plan": [
+                        [{"document": self.doc1.pk}, {"document": self.doc2.pk}],
+                    ],
+                    "preview": False,
+                    "delete_source": True,
+                },
+            ),
+            content_type="application/json",
+        )
         self.assertEqual(result.status_code, 200)
         m.assert_called_once()
         args, kwargs = m.call_args
-        self.assertCountEqual(kwargs["delete_document_ids"], [self.doc1.pk, self.doc2.pk])
+        self.assertCountEqual(
+            kwargs["delete_document_ids"],
+            [self.doc1.pk, self.doc2.pk],
+        )
 
     @mock.patch("documents.merge.async_task")
     def test_merge_invalid_doc(self, m):
-        result = self.client.post("/api/split_merge/", json.dumps({
-            "split_merge_plan": [
-                [{"document": self.doc1.pk}, {"document": self.doc3.pk}]
-            ],
-            "preview": False
-        }), content_type="application/json")
+        result = self.client.post(
+            "/api/split_merge/",
+            json.dumps(
+                {
+                    "split_merge_plan": [
+                        [{"document": self.doc1.pk}, {"document": self.doc3.pk}],
+                    ],
+                    "preview": False,
+                },
+            ),
+            content_type="application/json",
+        )
         self.assertEqual(result.status_code, 400)
         m.assert_not_called()
 

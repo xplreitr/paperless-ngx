@@ -26,7 +26,7 @@ import { TasksService } from 'src/app/services/tasks.service'
 import { ComponentCanDeactivate } from 'src/app/guards/dirty-doc.guard'
 import { SETTINGS_KEYS } from 'src/app/data/paperless-uisettings'
 import { ToastService } from 'src/app/services/toast.service'
-import { SplitMergeService } from 'src/app/services/split-merge.service';
+import { SplitMergeService } from 'src/app/services/split-merge.service'
 
 @Component({
   selector: 'app-app-frame',

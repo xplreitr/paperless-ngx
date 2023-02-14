@@ -37,7 +37,7 @@ import { DocumentCardSmallComponent } from './components/document-list/document-
 import { BulkEditorComponent } from './components/document-list/bulk-editor/bulk-editor.component'
 import { NgxFileDropModule } from 'ngx-file-drop'
 import { TextComponent } from './components/common/input/text/text.component'
-import { InputDebounceComponent } from './components/common/input/debounce/input-debounce.component';
+import { InputDebounceComponent } from './components/common/input/debounce/input-debounce.component'
 import { SelectComponent } from './components/common/input/select/select.component'
 import { CheckComponent } from './components/common/input/check/check.component'
 import { PasswordComponent } from './components/common/input/password/password.component'
@@ -80,10 +80,10 @@ import { TasksComponent } from './components/manage/tasks/tasks.component'
 import { TourNgBootstrapModule } from 'ngx-ui-tour-ng-bootstrap'
 import { MailAccountEditDialogComponent } from './components/common/edit-dialog/mail-account-edit-dialog/mail-account-edit-dialog.component'
 import { MailRuleEditDialogComponent } from './components/common/edit-dialog/mail-rule-edit-dialog/mail-rule-edit-dialog.component'
-import { SplitMergeComponent } from './components/split-merge/split-merge.component';
-import { DndModule } from 'ngx-drag-drop';
-import { DocumentChooserComponent } from './components/common/document-chooser/document-chooser.component';
-import { PageChooserComponent } from './components/common/page-chooser/page-chooser.component';
+import { SplitMergeComponent } from './components/split-merge/split-merge.component'
+import { DndModule } from 'ngx-drag-drop'
+import { DocumentChooserComponent } from './components/common/document-chooser/document-chooser.component'
+import { PageChooserComponent } from './components/common/page-chooser/page-chooser.component'
 
 import localeAr from '@angular/common/locales/ar'
 import localeBe from '@angular/common/locales/be'
@@ -196,7 +196,7 @@ function initializeApp(settings: SettingsService) {
     MailRuleEditDialogComponent,
     SplitMergeComponent,
     DocumentChooserComponent,
-    PageChooserComponent
+    PageChooserComponent,
   ],
   imports: [
     BrowserModule,

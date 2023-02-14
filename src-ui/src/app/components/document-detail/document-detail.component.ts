@@ -35,7 +35,7 @@ import { StoragePathService } from 'src/app/services/rest/storage-path.service'
 import { PaperlessStoragePath } from 'src/app/data/paperless-storage-path'
 import { StoragePathEditDialogComponent } from '../common/edit-dialog/storage-path-edit-dialog/storage-path-edit-dialog.component'
 import { SETTINGS_KEYS } from 'src/app/data/paperless-uisettings'
-import { SplitMergeService } from 'src/app/services/split-merge.service';
+import { SplitMergeService } from 'src/app/services/split-merge.service'
 
 @Component({
   selector: 'app-document-detail',
@@ -526,7 +526,7 @@ export class DocumentDetailComponent
 
   splitMerge() {
     this.splitMergeService.addDocument(this.document)
-    this.router.navigate(["split_merge"])
+    this.router.navigate(['split_merge'])
   }
 
   hasNext() {

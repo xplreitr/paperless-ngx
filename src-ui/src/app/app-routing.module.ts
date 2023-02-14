@@ -16,7 +16,7 @@ import { StoragePathListComponent } from './components/manage/storage-path-list/
 import { TasksComponent } from './components/manage/tasks/tasks.component'
 import { DirtyDocGuard } from './guards/dirty-doc.guard'
 import { DirtySavedViewGuard } from './guards/dirty-saved-view.guard'
-import { SplitMergeComponent } from './components/split-merge/split-merge.component';
+import { SplitMergeComponent } from './components/split-merge/split-merge.component'
 
 const routes: Routes = [
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' },

@@ -83,8 +83,8 @@ from .serialisers import BulkEditSerializer
 from .serialisers import CorrespondentSerializer
 from .serialisers import DocumentListSerializer
 from .serialisers import DocumentSerializer
-from .serialisers import DocumentTypeSerializer
 from .serialisers import DocumentSplitMergePlanSerializer
+from .serialisers import DocumentTypeSerializer
 from .serialisers import PostDocumentSerializer
 from .serialisers import SavedViewSerializer
 from .serialisers import StoragePathSerializer
@@ -949,7 +949,7 @@ class DocumentSplitMergeViewSet(GenericViewSet):
     serializer_class = DocumentSplitMergePlanSerializer
 
     def __init__(self, **kwargs):
-        super(DocumentSplitMergeViewSet, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.tempdir = os.path.join(settings.SCRATCH_DIR, "split-merge")
         os.makedirs(self.tempdir, exist_ok=True)
 
@@ -958,7 +958,9 @@ class DocumentSplitMergeViewSet(GenericViewSet):
 
     def retrieve(self, request, pk, *args, **kwargs):
         filename = os.path.join(
-            self.tempdir, pathvalidate.sanitize_filename(pk))
+            self.tempdir,
+            pathvalidate.sanitize_filename(pk),
+        )
         if not os.path.isfile(filename):
             raise Http404()
 
@@ -984,7 +986,7 @@ class DocumentSplitMergeViewSet(GenericViewSet):
                 preview=preview,
                 delete_source=delete_source,
                 metadata=metadata,
-                tempdir=self.tempdir
+                tempdir=self.tempdir,
             )
         except MergeError:
             logger.exception("Error during merge")

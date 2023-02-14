@@ -1,4 +1,10 @@
-import { Component, OnDestroy, OnInit, EventEmitter, Output } from '@angular/core'
+import {
+  Component,
+  OnDestroy,
+  OnInit,
+  EventEmitter,
+  Output,
+} from '@angular/core'
 import { PaperlessTag } from 'src/app/data/paperless-tag'
 import { PaperlessCorrespondent } from 'src/app/data/paperless-correspondent'
 import { PaperlessDocumentType } from 'src/app/data/paperless-document-type'
@@ -27,8 +33,8 @@ import { PaperlessStoragePath } from 'src/app/data/paperless-storage-path'
 import { SETTINGS_KEYS } from 'src/app/data/paperless-uisettings'
 import { FormControl, FormGroup } from '@angular/forms'
 import { first, Subject, takeUntil } from 'rxjs'
-import { SplitMergeService } from 'src/app/services/split-merge.service';
-import { Router } from '@angular/router';
+import { SplitMergeService } from 'src/app/services/split-merge.service'
+import { Router } from '@angular/router'
 
 @Component({
   selector: 'app-bulk-editor',
@@ -473,6 +479,6 @@ export class BulkEditorComponent implements OnInit, OnDestroy {
 
   addToSplitMerge() {
     this.splitMergeService.addDocuments(this.list.selectedDocuments)
-    this.router.navigate(["split_merge"])
+    this.router.navigate(['split_merge'])
   }
 }
