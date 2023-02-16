@@ -3,12 +3,10 @@ import os
 import re
 import tempfile
 
-from django_q.tasks import async_task
-
+from celery import group
 from documents import tasks
 from documents.consumer import ConsumerError
 from documents.models import Document
-
 from pikepdf import Pdf
 
 
@@ -20,7 +18,6 @@ class MergeError(Exception):
 
 
 class PdfCache:
-
     def __init__(self):
         self.cache = dict()
 
@@ -28,7 +25,7 @@ class PdfCache:
         if document.pk in self.cache:
             return self.cache[document.pk]
 
-        if document.mime_type == 'application/pdf':
+        if document.mime_type == "application/pdf":
             filename = document.source_path
         elif document.has_archive_version:
             filename = document.archive_path
@@ -69,32 +66,13 @@ def parse_page_list(page_list: str):
             first = int(match_range.group(1))
             last = int(match_range.group(2))
             if first <= last:
-                result.extend(range(first, last+1))
+                result.extend(range(first, last + 1))
             else:
-                result.extend(reversed(range(last, first+1)))
+                result.extend(reversed(range(last, first + 1)))
         else:
             raise MergeError(f"Invalid page range: {page_list}")
 
     return result
-
-
-def consume_many_files(kwargs_list, delete_document_ids=None):
-    new_document_ids = []
-
-    try:
-        for kwargs in kwargs_list:
-            new_document_ids.append(tasks.consume_file(**kwargs))
-
-    except ConsumerError:
-        # in case something goes wrong, delete all previously created documents
-        for document_id in new_document_ids:
-            Document.objects.get(id=document_id).delete()
-        raise
-    else:
-        # If everything goes well, optionally delete source documents
-        if delete_document_ids:
-            for document_id in delete_document_ids:
-                Document.objects.get(id=document_id).delete()
 
 
 def copy_pdf_metadata(source: Pdf, target: Pdf):
@@ -105,8 +83,10 @@ def copy_pdf_metadata(source: Pdf, target: Pdf):
                     target_meta[k] = source_meta[k]
                 except TypeError:
                     # TODO: https://github.com/pikepdf/pikepdf/issues/188
-                    logger.warning(f"Could not copy metadata {k} while "
-                                   f"merging documents", exc_info=True)
+                    logger.warning(
+                        f"Could not copy metadata {k} while " f"merging documents",
+                        exc_info=True,
+                    )
 
 
 def copy_document_metadata(document: Document, consume_task):
@@ -115,18 +95,18 @@ def copy_document_metadata(document: Document, consume_task):
     if document.document_type:
         consume_task["override_document_type_id"] = document.document_type.id
     if document.tags.count() > 0:
-        consume_task["override_tag_ids"] = [
-            tag.id for tag in document.tags.all()
-        ]
+        consume_task["override_tag_ids"] = [tag.id for tag in document.tags.all()]
 
-    consume_task['override_date'] = document.created
+    consume_task["override_date"] = document.created
 
 
-def execute_split_merge_plan(plan,
-                             tempdir: str,
-                             metadata: str = "redo",
-                             delete_source: bool = False,
-                             preview: bool = True):
+def execute_split_merge_plan(
+    plan,
+    tempdir: str,
+    metadata: str = "redo",
+    delete_source: bool = False,
+    preview: bool = True,
+):
 
     consume_tasks = []
     cache = PdfCache()
@@ -140,42 +120,50 @@ def execute_split_merge_plan(plan,
             try:
                 target_pdf = Pdf.new()
                 target_pdf_filename = tempfile.NamedTemporaryFile(
-                    prefix="merge_", suffix="_pdf", dir=tempdir).name
+                    prefix="merge_",
+                    suffix="_pdf",
+                    dir=tempdir,
+                ).name
                 version = target_pdf.pdf_version
-                consume_task = {"path": target_pdf_filename}
+                consume_task_kwargs = {"path": target_pdf_filename}
 
                 for (i, source_doc_spec) in enumerate(target_doc_spec):
-                    source_document_id = source_doc_spec['document']
+                    source_document_id = source_doc_spec["document"]
                     source_documents.add(source_document_id)
 
-                    if 'pages' in source_doc_spec:
-                        pages = parse_page_list(source_doc_spec['pages'])
+                    if "pages" in source_doc_spec:
+                        pages = parse_page_list(source_doc_spec["pages"])
                     else:
                         pages = None
 
                     try:
                         source_document: Document = Document.objects.get(
-                            id=source_document_id)
+                            id=source_document_id,
+                        )
                     except Document.DoesNotExist:
                         raise MergeError(
-                            f"Document {source_document_id} does not exist.")
+                            f"Document {source_document_id} does not exist.",
+                        )
 
                     source_pdf: Pdf = cache.open_from_document(source_document)
                     version = max(version, source_pdf.pdf_version)
 
                     if i == 0:
                         # first source document for this target
-                        consume_task["override_title"] = source_document.title
+                        consume_task_kwargs["override_title"] = source_document.title
                         copy_pdf_metadata(source_pdf, target_pdf)
                         if metadata == "copy_first":
                             copy_document_metadata(
-                                source_document, consume_task)
+                                source_document,
+                                consume_task_kwargs,
+                            )
 
                     if pages is not None:
                         for page in pages:
                             if page > len(source_pdf.pages) or page < 1:
                                 raise MergeError(
-                                    f"Page {page} is out of range.")
+                                    f"Page {page} is out of range.",
+                                )
                             target_pdf.pages.append(source_pdf.pages[page - 1])
                     else:
                         target_pdf.pages.extend(source_pdf.pages)
@@ -184,7 +172,7 @@ def execute_split_merge_plan(plan,
                 target_pdf.save(target_pdf_filename, min_version=version)
                 target_pdf.close()
 
-                consume_tasks.append(consume_task)
+                consume_tasks.append(tasks.consume_file.s(**consume_task_kwargs))
             finally:
                 if target_pdf is not None:
                     target_pdf.close()
@@ -192,10 +180,39 @@ def execute_split_merge_plan(plan,
         cache.close_all()
 
     if not preview:
-        async_task(
-            "documents.merge.consume_many_files",
-            kwargs_list=consume_tasks,
-            delete_document_ids=list(source_documents) if delete_source else None  # NOQA: E501
-        )
+
+        # OLD CODE
+        def consume_many_files(kwargs_list, delete_document_ids=None):
+            new_document_ids = []
+
+            try:
+                for kwargs in kwargs_list:
+                    new_document_ids.append(tasks.consume_file(**kwargs))
+
+            except ConsumerError:
+                # in case something goes wrong, delete all previously created documents
+                for document_id in new_document_ids:
+                    Document.objects.get(id=document_id).delete()
+                raise
+            else:
+                # If everything goes well, optionally delete source documents
+                if delete_document_ids:
+                    for document_id in delete_document_ids:
+                        Document.objects.get(id=document_id).delete()
+
+        consume_task = group(tasks.consume_file.s(t) for t in consume_tasks)
+
+        if delete_source:
+            consume_task = consume_task | tasks.delete_documents_callback.s(
+                source_documents,
+            )
+
+        # consume_task = cons
+
+        # async_task(
+        #    "documents.merge.consume_many_files",
+        #    kwargs_list=consume_tasks,
+        #    delete_document_ids=list(source_documents) if delete_source else None,
+        # )
 
     return [t["path"] for t in consume_tasks]

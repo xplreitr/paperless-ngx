@@ -4,6 +4,7 @@ import os
 import shutil
 import uuid
 from pathlib import Path
+from typing import List
 from typing import Type
 
 import dateutil.parser
@@ -213,6 +214,7 @@ def consume_file(
     if document:
         # TODO: merge conflict, branch requested document.pk returned as int
         #  Maybe this was used in some follow up task?
+        #  This is required for the consume_many_files function
         return f"Success. New document id {document.pk} created"
     else:
         raise ConsumerError(
@@ -311,3 +313,9 @@ def update_document_archive_file(document_id):
         )
     finally:
         parser.cleanup()
+
+
+@shared_task
+def delete_documents_callback(results, document_ids: List[int]):
+    for document_id in document_ids:
+        Document.objects.get(id=document_id).delete()
