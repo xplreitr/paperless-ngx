@@ -3,9 +3,9 @@ import os
 import re
 import tempfile
 
+from celery import chord
 from celery import group
 from documents import tasks
-from documents.consumer import ConsumerError
 from documents.models import Document
 from pikepdf import Pdf
 
@@ -125,7 +125,7 @@ def execute_split_merge_plan(
                     dir=tempdir,
                 ).name
                 version = target_pdf.pdf_version
-                consume_task_kwargs = {"path": target_pdf_filename}
+                consume_task_kwargs = {}
 
                 for (i, source_doc_spec) in enumerate(target_doc_spec):
                     source_document_id = source_doc_spec["document"]
@@ -172,7 +172,9 @@ def execute_split_merge_plan(
                 target_pdf.save(target_pdf_filename, min_version=version)
                 target_pdf.close()
 
-                consume_tasks.append(tasks.consume_file.s(**consume_task_kwargs))
+                consume_tasks.append(
+                    tasks.consume_file.s(target_pdf_filename, **consume_task_kwargs),
+                )
             finally:
                 if target_pdf is not None:
                     target_pdf.close()
@@ -181,38 +183,12 @@ def execute_split_merge_plan(
 
     if not preview:
 
-        # OLD CODE
-        def consume_many_files(kwargs_list, delete_document_ids=None):
-            new_document_ids = []
-
-            try:
-                for kwargs in kwargs_list:
-                    new_document_ids.append(tasks.consume_file(**kwargs))
-
-            except ConsumerError:
-                # in case something goes wrong, delete all previously created documents
-                for document_id in new_document_ids:
-                    Document.objects.get(id=document_id).delete()
-                raise
-            else:
-                # If everything goes well, optionally delete source documents
-                if delete_document_ids:
-                    for document_id in delete_document_ids:
-                        Document.objects.get(id=document_id).delete()
-
-        consume_task = group(tasks.consume_file.s(t) for t in consume_tasks)
-
         if delete_source:
-            consume_task = consume_task | tasks.delete_documents_callback.s(
-                source_documents,
-            )
+            chord(
+                header=consume_tasks,
+                body=tasks.delete_documents_callback.s(list(source_documents)),
+            ).delay()
+        else:
+            group(consume_tasks).delay()
 
-        # consume_task = cons
-
-        # async_task(
-        #    "documents.merge.consume_many_files",
-        #    kwargs_list=consume_tasks,
-        #    delete_document_ids=list(source_documents) if delete_source else None,
-        # )
-
-    return [t["path"] for t in consume_tasks]
+    return [t.args[0] for t in consume_tasks]
