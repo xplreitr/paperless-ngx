@@ -262,6 +262,14 @@ do CORS calls. Set this to your public domain name.
 
     Defaults to "<http://localhost:8000>".
 
+`PAPERLESS_TRUSTED_PROXIES=<comma-separated-list>`
+
+: This may be needed to prevent IP address spoofing if you are using e.g.
+fail2ban with log entries for failed authorization attempts. Value should be
+IP address(es).
+
+    Defaults to empty string.
+
 `PAPERLESS_FORCE_SCRIPT_NAME=<path>`
 
 : To host paperless under a subpath url like example.com/paperless you
@@ -407,12 +415,6 @@ modes are available:
     -   `skip`: Paperless skips all pages and will perform ocr only on
         pages where no text is present. This is the safest option.
 
-    -   `skip_noarchive`: In addition to skip, paperless won't create
-        an archived version of your documents when it finds any text in
-        them. This is useful if you don't want to have two
-        almost-identical versions of your digital documents in the media
-        folder. This is the fastest option.
-
     -   `redo`: Paperless will OCR all pages of your documents and
         attempt to replace any existing text layers with new text. This
         will be useful for documents from scanners that already
@@ -434,6 +436,19 @@ modes are available:
 
     Read more about this in the [OCRmyPDF
     documentation](https://ocrmypdf.readthedocs.io/en/latest/advanced.html#when-ocr-is-skipped).
+
+`PAPERLESS_OCR_SKIP_ARCHIVE_FILE=<mode>`
+
+: Specify when you would like paperless to skip creating an archived
+version of your documents. This is useful if you don't want to have two
+almost-identical versions of your documents in the media folder.
+
+    -   `never`: Never skip creating an archived version.
+    -   `with_text`: Skip creating an archived version for documents
+    that already have embedded text.
+    -   `always`: Always skip creating an archived version.
+
+    The default is `never`.
 
 `PAPERLESS_OCR_CLEAN=<mode>`
 
@@ -626,7 +641,7 @@ services:
     # ...
 
     gotenberg:
-      image: gotenberg/gotenberg:7.6
+      image: gotenberg/gotenberg:7.8
       restart: unless-stopped
       # The gotenberg chromium route is used to convert .eml files. We do not
       # want to allow external content like tracking pixels or even javascript.
@@ -999,13 +1014,20 @@ within your documents.
 `PAPERLESS_CONSUMER_IGNORE_PATTERNS=<json>`
 
 : By default, paperless ignores certain files and folders in the
-consumption directory, such as system files created by the Mac OS.
+consumption directory, such as system files created by the Mac OS
+or hidden folders some tools use to store data.
 
     This can be adjusted by configuring a custom json array with
     patterns to exclude.
 
+    For example, `.DS_STORE/*` will ignore any files found in a folder
+    named `.DS_STORE`, including `.DS_STORE/bar.pdf` and `foo/.DS_STORE/bar.pdf`
+
+    A pattern like `._*` will ignore anything starting with `._`, including:
+    `._foo.pdf` and `._bar/foo.pdf`
+
     Defaults to
-    `[".DS_STORE/*", "._*", ".stfolder/*", ".stversions/*", ".localized/*", "desktop.ini"]`.
+    `[".DS_STORE/*", "._*", ".stfolder/*", ".stversions/*", ".localized/*", "desktop.ini", "@eaDir/*"]`.
 
 ## Binaries
 

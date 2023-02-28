@@ -26,6 +26,7 @@ import { TasksService } from 'src/app/services/tasks.service'
 import { ComponentCanDeactivate } from 'src/app/guards/dirty-doc.guard'
 import { SETTINGS_KEYS } from 'src/app/data/paperless-uisettings'
 import { ToastService } from 'src/app/services/toast.service'
+import { ComponentWithPermissions } from '../with-permissions/with-permissions.component'
 import { SplitMergeService } from 'src/app/services/split-merge.service'
 
 @Component({
@@ -33,7 +34,10 @@ import { SplitMergeService } from 'src/app/services/split-merge.service'
   templateUrl: './app-frame.component.html',
   styleUrls: ['./app-frame.component.scss'],
 })
-export class AppFrameComponent implements OnInit, ComponentCanDeactivate {
+export class AppFrameComponent
+  extends ComponentWithPermissions
+  implements OnInit, ComponentCanDeactivate
+{
   constructor(
     public router: Router,
     private activatedRoute: ActivatedRoute,
@@ -46,7 +50,9 @@ export class AppFrameComponent implements OnInit, ComponentCanDeactivate {
     public tasksService: TasksService,
     private readonly toastService: ToastService,
     private splitMergeService: SplitMergeService
-  ) {}
+  ) {
+    super()
+  }
 
   ngOnInit(): void {
     if (this.settingsService.get(SETTINGS_KEYS.UPDATE_CHECKING_ENABLED)) {

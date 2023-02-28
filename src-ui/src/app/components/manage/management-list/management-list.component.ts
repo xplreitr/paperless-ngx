@@ -12,16 +12,23 @@ import {
   MatchingModel,
   MATCHING_ALGORITHMS,
   MATCH_AUTO,
+  MATCH_NONE,
 } from 'src/app/data/matching-model'
 import { ObjectWithId } from 'src/app/data/object-with-id'
+import { ObjectWithPermissions } from 'src/app/data/object-with-permissions'
 import {
   SortableDirective,
   SortEvent,
 } from 'src/app/directives/sortable.directive'
 import { DocumentListViewService } from 'src/app/services/document-list-view.service'
+import {
+  PermissionsService,
+  PermissionType,
+} from 'src/app/services/permissions.service'
 import { AbstractNameFilterService } from 'src/app/services/rest/abstract-name-filter-service'
 import { ToastService } from 'src/app/services/toast.service'
 import { ConfirmDialogComponent } from '../../common/confirm-dialog/confirm-dialog.component'
+import { ComponentWithPermissions } from '../../with-permissions/with-permissions.component'
 
 export interface ManagementListColumn {
   key: string
@@ -35,6 +42,7 @@ export interface ManagementListColumn {
 
 @Directive()
 export abstract class ManagementListComponent<T extends ObjectWithId>
+  extends ComponentWithPermissions
   implements OnInit, OnDestroy
 {
   constructor(
@@ -43,11 +51,15 @@ export abstract class ManagementListComponent<T extends ObjectWithId>
     private editDialogComponent: any,
     private toastService: ToastService,
     private documentListViewService: DocumentListViewService,
+    private permissionsService: PermissionsService,
     protected filterRuleType: number,
     public typeName: string,
     public typeNamePlural: string,
+    public permissionType: PermissionType,
     public extraColumns: ManagementListColumn[]
-  ) {}
+  ) {
+    super()
+  }
 
   @ViewChildren(SortableDirective) headers: QueryList<SortableDirective>
 
@@ -85,6 +97,8 @@ export abstract class ManagementListComponent<T extends ObjectWithId>
   getMatching(o: MatchingModel) {
     if (o.matching_algorithm == MATCH_AUTO) {
       return $localize`Automatic`
+    } else if (o.matching_algorithm == MATCH_NONE) {
+      return $localize`None`
     } else if (o.match && o.match.length > 0) {
       return `${
         MATCHING_ALGORITHMS.find((a) => a.id == o.matching_algorithm).shortName
@@ -208,5 +222,16 @@ export abstract class ManagementListComponent<T extends ObjectWithId>
 
   onNameFilterKeyUp(event: KeyboardEvent) {
     if (event.code == 'Escape') this.nameFilterDebounce.next(null)
+  }
+
+  userCanDelete(object: ObjectWithPermissions): boolean {
+    return this.permissionsService.currentUserOwnsObject(object)
+  }
+
+  userCanEdit(object: ObjectWithPermissions): boolean {
+    return this.permissionsService.currentUserHasObjectPermissions(
+      this.PermissionAction.Change,
+      object
+    )
   }
 }

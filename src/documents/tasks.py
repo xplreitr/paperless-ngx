@@ -5,6 +5,7 @@ import shutil
 import uuid
 from pathlib import Path
 from typing import List
+from typing import Optional
 from typing import Type
 
 import dateutil.parser
@@ -13,6 +14,7 @@ from asgiref.sync import async_to_sync
 from celery import shared_task
 from channels.layers import get_channel_layer
 from django.conf import settings
+from django.contrib.auth.models import User
 from django.db import transaction
 from django.db.models.signals import post_save
 from documents import barcodes
@@ -97,6 +99,8 @@ def consume_file(
     override_tag_ids=None,
     task_id=None,
     override_created=None,
+    override_owner_id=None,
+    override_archive_serial_num: Optional[int] = None,
 ):
 
     path = Path(path).resolve()
@@ -208,7 +212,8 @@ def consume_file(
         override_tag_ids=override_tag_ids,
         task_id=task_id,
         override_created=override_created,
-        override_asn=asn,
+        override_asn=override_archive_serial_num or asn,
+        override_owner_id=override_owner_id,
     )
 
     if document:
@@ -313,6 +318,15 @@ def update_document_archive_file(document_id):
         )
     finally:
         parser.cleanup()
+
+
+@shared_task
+def update_owner_for_object(document_ids, owner):
+    documents = Document.objects.filter(id__in=document_ids)
+    ownerUser = User.objects.get(pk=owner) if owner is not None else None
+    for document in documents:
+        document.owner = ownerUser if owner is not None else None
+        document.save()
 
 
 @shared_task

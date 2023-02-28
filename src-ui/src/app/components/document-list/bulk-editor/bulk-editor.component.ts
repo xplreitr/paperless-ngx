@@ -31,6 +31,13 @@ import { saveAs } from 'file-saver'
 import { StoragePathService } from 'src/app/services/rest/storage-path.service'
 import { PaperlessStoragePath } from 'src/app/data/paperless-storage-path'
 import { SETTINGS_KEYS } from 'src/app/data/paperless-uisettings'
+import { ComponentWithPermissions } from '../../with-permissions/with-permissions.component'
+import { PermissionsDialogComponent } from '../../common/permissions-dialog/permissions-dialog.component'
+import {
+  PermissionAction,
+  PermissionsService,
+  PermissionType,
+} from 'src/app/services/permissions.service'
 import { FormControl, FormGroup } from '@angular/forms'
 import { first, Subject, takeUntil } from 'rxjs'
 import { SplitMergeService } from 'src/app/services/split-merge.service'
@@ -41,7 +48,10 @@ import { Router } from '@angular/router'
   templateUrl: './bulk-editor.component.html',
   styleUrls: ['./bulk-editor.component.scss'],
 })
-export class BulkEditorComponent implements OnInit, OnDestroy {
+export class BulkEditorComponent
+  extends ComponentWithPermissions
+  implements OnInit, OnDestroy
+{
   tags: PaperlessTag[]
   correspondents: PaperlessCorrespondent[]
   documentTypes: PaperlessDocumentType[]
@@ -51,6 +61,10 @@ export class BulkEditorComponent implements OnInit, OnDestroy {
   correspondentSelectionModel = new FilterableDropdownSelectionModel()
   documentTypeSelectionModel = new FilterableDropdownSelectionModel()
   storagePathsSelectionModel = new FilterableDropdownSelectionModel()
+  tagDocumentCounts: SelectionDataItem[]
+  correspondentDocumentCounts: SelectionDataItem[]
+  documentTypeDocumentCounts: SelectionDataItem[]
+  storagePathDocumentCounts: SelectionDataItem[]
   awaitingDownload: boolean
 
   unsubscribeNotifier: Subject<any> = new Subject()
@@ -72,12 +86,15 @@ export class BulkEditorComponent implements OnInit, OnDestroy {
     private settings: SettingsService,
     private toastService: ToastService,
     private storagePathService: StoragePathService,
+    private permissionService: PermissionsService,
     private splitMergeService: SplitMergeService,
     // TODO: this was added for the merge tool, and I need to verify:
     // - why it was added
     // - if we can still add it and use it this way after 2 years worth of updates
     private router: Router
-  ) {}
+  ) {
+    super()
+  }
 
   applyOnClose: boolean = this.settings.get(
     SETTINGS_KEYS.BULK_EDIT_APPLY_ON_CLOSE
@@ -85,6 +102,30 @@ export class BulkEditorComponent implements OnInit, OnDestroy {
   showConfirmationDialogs: boolean = this.settings.get(
     SETTINGS_KEYS.BULK_EDIT_CONFIRMATION_DIALOGS
   )
+
+  get userCanEditAll(): boolean {
+    let canEdit: boolean = this.permissionService.currentUserCan(
+      PermissionAction.Change,
+      PermissionType.Document
+    )
+    if (!canEdit) return false
+
+    const docs = this.list.documents.filter((d) => this.list.selected.has(d.id))
+    canEdit = docs.every((d) =>
+      this.permissionService.currentUserHasObjectPermissions(
+        this.PermissionAction.Change,
+        d
+      )
+    )
+    return canEdit
+  }
+
+  get userOwnsAll(): boolean {
+    let ownsAll: boolean = true
+    const docs = this.list.documents.filter((d) => this.list.selected.has(d.id))
+    ownsAll = docs.every((d) => this.permissionService.currentUserOwnsObject(d))
+    return ownsAll
+  }
 
   ngOnInit() {
     this.tagService
@@ -182,6 +223,7 @@ export class BulkEditorComponent implements OnInit, OnDestroy {
       .getSelectionData(Array.from(this.list.selected))
       .pipe(first())
       .subscribe((s) => {
+        this.tagDocumentCounts = s.selected_tags
         this.applySelectionData(s.selected_tags, this.tagSelectionModel)
       })
   }
@@ -191,6 +233,7 @@ export class BulkEditorComponent implements OnInit, OnDestroy {
       .getSelectionData(Array.from(this.list.selected))
       .pipe(first())
       .subscribe((s) => {
+        this.documentTypeDocumentCounts = s.selected_document_types
         this.applySelectionData(
           s.selected_document_types,
           this.documentTypeSelectionModel
@@ -203,6 +246,7 @@ export class BulkEditorComponent implements OnInit, OnDestroy {
       .getSelectionData(Array.from(this.list.selected))
       .pipe(first())
       .subscribe((s) => {
+        this.correspondentDocumentCounts = s.selected_correspondents
         this.applySelectionData(
           s.selected_correspondents,
           this.correspondentSelectionModel
@@ -215,6 +259,7 @@ export class BulkEditorComponent implements OnInit, OnDestroy {
       .getSelectionData(Array.from(this.list.selected))
       .pipe(first())
       .subscribe((s) => {
+        this.storagePathDocumentCounts = s.selected_storage_paths
         this.applySelectionData(
           s.selected_storage_paths,
           this.storagePathsSelectionModel
@@ -475,6 +520,16 @@ export class BulkEditorComponent implements OnInit, OnDestroy {
         modal.componentInstance.buttonsEnabled = false
         this.executeBulkOperation(modal, 'redo_ocr', {})
       })
+  }
+
+  setPermissions() {
+    let modal = this.modalService.open(PermissionsDialogComponent, {
+      backdrop: 'static',
+    })
+    modal.componentInstance.confirmClicked.subscribe((permissions) => {
+      modal.componentInstance.buttonsEnabled = false
+      this.executeBulkOperation(modal, 'set_permissions', permissions)
+    })
   }
 
   addToSplitMerge() {

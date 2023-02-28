@@ -11,6 +11,7 @@ import { NgbDropdown } from '@ng-bootstrap/ng-bootstrap'
 import { ToggleableItemState } from './toggleable-dropdown-button/toggleable-dropdown-button.component'
 import { MatchingModel } from 'src/app/data/matching-model'
 import { Subject } from 'rxjs'
+import { SelectionDataItem } from 'src/app/services/rest/document.service'
 
 export interface ChangedItems {
   itemsToAdd: MatchingModel[]
@@ -317,6 +318,9 @@ export class FilterableDropdownComponent {
   @Input()
   applyOnClose = false
 
+  @Input()
+  disabled = false
+
   @Output()
   apply = new EventEmitter<ChangedItems>()
 
@@ -328,6 +332,15 @@ export class FilterableDropdownComponent {
       this.selectionModel.selectionSize() > 1 &&
       this.selectionModel.getExcludedItems().length == 0
     )
+  }
+
+  @Input()
+  documentCounts: SelectionDataItem[]
+
+  getUpdatedDocumentCount(id: number) {
+    if (this.documentCounts) {
+      return this.documentCounts.find((c) => c.id === id)?.document_count
+    }
   }
 
   modelIsDirty: boolean = false
@@ -355,6 +368,7 @@ export class FilterableDropdownComponent {
       }, 0)
       if (this.editing) {
         this.selectionModel.reset()
+        this.modelIsDirty = false
       }
       this.opened.next(this)
     } else {
