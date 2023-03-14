@@ -89,9 +89,10 @@ import { PermissionsUserComponent } from './components/common/input/permissions/
 import { PermissionsGroupComponent } from './components/common/input/permissions/permissions-group/permissions-group.component'
 import { IfOwnerDirective } from './directives/if-owner.directive'
 import { IfObjectPermissionsDirective } from './directives/if-object-permissions.directive'
-import { SplitMergeComponent } from './components/split-merge/split-merge.component'
+import { PermissionsDialogComponent } from './components/common/permissions-dialog/permissions-dialog.component'
+import { PermissionsFormComponent } from './components/common/input/permissions/permissions-form/permissions-form.component'
 import { DndModule } from 'ngx-drag-drop'
-import { DocumentChooserComponent } from './components/common/document-chooser/document-chooser.component'
+import { SplitMergeComponent } from './components/split-merge/split-merge.component'
 import { PageChooserComponent } from './components/common/page-chooser/page-chooser.component'
 
 import localeAr from '@angular/common/locales/ar'
@@ -114,8 +115,6 @@ import localeSr from '@angular/common/locales/sr'
 import localeSv from '@angular/common/locales/sv'
 import localeTr from '@angular/common/locales/tr'
 import localeZh from '@angular/common/locales/zh'
-import { PermissionsDialogComponent } from './components/common/permissions-dialog/permissions-dialog.component'
-import { PermissionsFormComponent } from './components/common/input/permissions/permissions-form/permissions-form.component'
 
 registerLocaleData(localeAr)
 registerLocaleData(localeBe)
@@ -216,7 +215,6 @@ function initializeApp(settings: SettingsService) {
     PermissionsDialogComponent,
     PermissionsFormComponent,
     SplitMergeComponent,
-    DocumentChooserComponent,
     PageChooserComponent,
   ],
   imports: [

@@ -88,9 +88,6 @@ export class BulkEditorComponent
     private storagePathService: StoragePathService,
     private permissionService: PermissionsService,
     private splitMergeService: SplitMergeService,
-    // TODO: this was added for the merge tool, and I need to verify:
-    // - why it was added
-    // - if we can still add it and use it this way after 2 years worth of updates
     private router: Router
   ) {
     super()
@@ -534,6 +531,7 @@ export class BulkEditorComponent
 
   addToSplitMerge() {
     this.splitMergeService.addDocuments(this.list.selectedDocuments)
+    this.list.selectNone()
     this.router.navigate(['split_merge'])
   }
 }

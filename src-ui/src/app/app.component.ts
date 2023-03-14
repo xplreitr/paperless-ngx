@@ -246,6 +246,7 @@ export class AppComponent implements OnInit, OnDestroy {
   public get dragDropEnabled(): boolean {
     return (
       !this.router.url.includes('dashboard') &&
+      !this.router.url.includes('split_merge') &&
       this.permissionsService.currentUserCan(
         PermissionAction.Add,
         PermissionType.Document
