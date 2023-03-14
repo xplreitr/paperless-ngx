@@ -201,11 +201,11 @@ $form-check-radio-checked-bg-image-dark: url("data:image/svg+xml,<svg xmlns='htt
     color: var(--pngx-body-color-accent);
   }
 
-  .close, .modal .btn-close, .alert .btn-close {
+  .close, .modal .btn-close, .alert .btn-close, .popover .btn-close {
     text-shadow: 0 1px 0 #666;
   }
 
-  .modal .btn-close, .alert .btn-close, .toast .btn-close {
+  .modal .btn-close, .alert .btn-close, .toast .btn-close, .popover .btn-close {
     filter: invert(1) grayscale(100%) brightness(200%);
   }
 

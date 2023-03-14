@@ -73,11 +73,6 @@
     </div>
   </div>
   <div class="col-auto ms-auto mb-2 mb-xl-0 d-flex">
-    <button type="button" class="btn btn-sm btn-outline-primary me-2" (click)="addToSplitMerge()">
-      <svg class="buttonicon" fill="currentColor">
-        <use xlink:href="assets/bootstrap-icons.svg#scissors" />
-      </svg>&nbsp;<span class="d-none d-lg-inline" i18n>Add to split/merge</span>
-    </button>
     <div class="btn-toolbar me-2">
 
       <button type="button" class="btn btn-sm btn-outline-primary me-2" (click)="setPermissions()" [disabled]="!userOwnsAll || !userCanEditAll">
@@ -93,7 +88,16 @@
           <div class="d-none d-sm-inline">&nbsp;<ng-container i18n>Actions</ng-container></div>
         </button>
         <div ngbDropdownMenu aria-labelledby="dropdownSelect" class="shadow">
-          <button ngbDropdownItem (click)="redoOcrSelected()" [disabled]="!userCanEditAll" i18n>Redo OCR</button>
+          <button ngbDropdownItem (click)="addToSplitMerge()">
+            <svg class="buttonicon" fill="currentColor">
+              <use xlink:href="assets/bootstrap-icons.svg#scissors" />
+            </svg><span class="d-none d-lg-inline ps-2" i18n>Add to split/merge</span>
+          </button>
+          <button ngbDropdownItem (click)="redoOcrSelected()" [disabled]="!userCanEditAll">
+            <svg class="buttonicon" fill="currentColor">
+              <use xlink:href="assets/bootstrap-icons.svg#arrow-clockwise" />
+            </svg><span class="d-none d-lg-inline ps-2" i18n>Redo OCR</span>
+          </button>
         </div>
       </div>
     </div>

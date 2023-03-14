@@ -80,10 +80,10 @@
             </a>
           </li>
           <li class="nav-item" *ngIf="splitMergeToolVisible">
-            <a class="nav-link" routerLink="split_merge" routerLinkActive="active" (click)="closeMenu()">
+            <a class="nav-link" routerLink="split_merge" routerLinkActive="active" (click)="closeMenu()" ngbPopover="Split & merge" i18n-ngbPopover [disablePopover]="!slimSidebarEnabled" placement="end" container="body" triggers="mouseenter:mouseleave" popoverClass="popover-slim">
               <svg class="sidebaricon" fill="currentColor">
                 <use xlink:href="assets/bootstrap-icons.svg#scissors"/>
-              </svg>&nbsp;<ng-container i18n>Split & merge</ng-container>
+              </svg><span>&nbsp;<ng-container i18n>Split & merge</ng-container></span>
             </a>
           </li>
         </ul>
