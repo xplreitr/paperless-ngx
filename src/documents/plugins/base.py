@@ -1,4 +1,5 @@
 import abc
+from logging import getLogger
 from pathlib import Path
 from typing import Final
 from typing import Optional
@@ -63,6 +64,7 @@ class ConsumeTaskPlugin(abc.ABC):
         super().__init__()
         self.input_doc = input_doc
         self.metadata = metadata
+        self.log = getLogger(f"paperless.{self.NAME}")
         self.base_tmp_dir: Final = base_tmp_dir
         self.status_mgr = status_mgr
         self.task_id: Final = task_id

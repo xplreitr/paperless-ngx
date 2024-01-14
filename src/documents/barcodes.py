@@ -1,4 +1,3 @@
-import logging
 import re
 import tempfile
 from dataclasses import dataclass
@@ -19,8 +18,6 @@ from documents.plugins.base import StopConsumeTaskError
 from documents.plugins.helpers import ProgressStatusOptions
 from documents.utils import copy_basic_file_stats
 from documents.utils import copy_file_with_basic_stats
-
-logger = logging.getLogger("paperless.barcodes")
 
 
 @dataclass(frozen=True)
@@ -87,7 +84,7 @@ class BarcodePlugin(ConsumeTaskPlugin):
         # Update/overwrite an ASN if possible
         located_asn = self.asn
         if located_asn is not None:
-            logger.info(f"Found ASN in barcode: {located_asn}")
+            self.log.info(f"Found ASN in barcode: {located_asn}")
             self.metadata.asn = located_asn
 
         separator_pages = self.get_separation_pages()
@@ -121,7 +118,7 @@ class BarcodePlugin(ConsumeTaskPlugin):
                 # All the same metadata
                 self.metadata,
             )
-            logger.info(f"Created new task {task.id} for {new_document.name}")
+            self.log.info(f"Created new task {task.id} for {new_document.name}")
 
         # This file is now two or more files
         self.input_doc.original_file.unlink()
@@ -152,8 +149,7 @@ class BarcodePlugin(ConsumeTaskPlugin):
         )
         self._tiff_conversion_done = True
 
-    @staticmethod
-    def read_barcodes_zxing(image: Image.Image) -> list[str]:
+    def read_barcodes_zxing(self, image: Image.Image) -> list[str]:
         barcodes = []
 
         import zxingcpp
@@ -162,14 +158,13 @@ class BarcodePlugin(ConsumeTaskPlugin):
         for barcode in detected_barcodes:
             if barcode.text:
                 barcodes.append(barcode.text)
-                logger.debug(
+                self.log.debug(
                     f"Barcode of type {barcode.format} found: {barcode.text}",
                 )
 
         return barcodes
 
-    @staticmethod
-    def read_barcodes_pyzbar(image: Image.Image) -> list[str]:
+    def read_barcodes_pyzbar(self, image: Image.Image) -> list[str]:
         barcodes = []
 
         from pyzbar import pyzbar
@@ -182,7 +177,7 @@ class BarcodePlugin(ConsumeTaskPlugin):
             if barcode.data:
                 decoded_barcode = barcode.data.decode("utf-8")
                 barcodes.append(decoded_barcode)
-                logger.debug(
+                self.log.debug(
                     f"Barcode of type {barcode.type} found: {decoded_barcode}",
                 )
 
@@ -203,10 +198,10 @@ class BarcodePlugin(ConsumeTaskPlugin):
         # Choose the library for reading
         if settings.CONSUMER_BARCODE_SCANNER == "PYZBAR":
             reader = self.read_barcodes_pyzbar
-            logger.debug("Scanning for barcodes using PYZBAR")
+            self.log.debug("Scanning for barcodes using PYZBAR")
         else:
             reader = self.read_barcodes_zxing
-            logger.debug("Scanning for barcodes using ZXING")
+            self.log.debug("Scanning for barcodes using ZXING")
 
         try:
             pages_from_path = convert_from_path(
@@ -218,7 +213,7 @@ class BarcodePlugin(ConsumeTaskPlugin):
             for current_page_number, page in enumerate(pages_from_path):
                 factor = settings.CONSUMER_BARCODE_UPSCALE
                 if factor > 1.0:
-                    logger.debug(
+                    self.log.debug(
                         f"Upscaling image by {factor} for better barcode detection",
                     )
                     x, y = page.size
@@ -234,13 +229,13 @@ class BarcodePlugin(ConsumeTaskPlugin):
         # Password protected files can't be checked
         # This is the exception raised for those
         except PDFPageCountError as e:
-            logger.warning(
+            self.log.warning(
                 f"File is likely password protected, not checking for barcodes: {e}",
             )
         # This file is really borked, allow the consumption to continue
         # but it may fail further on
         except Exception as e:  # pragma: no cover
-            logger.warning(
+            self.log.warning(
                 f"Exception during barcode scanning: {e}",
             )
 
@@ -264,7 +259,7 @@ class BarcodePlugin(ConsumeTaskPlugin):
         )
 
         if asn_text:
-            logger.debug(f"Found ASN Barcode: {asn_text}")
+            self.log.debug(f"Found ASN Barcode: {asn_text}")
             # remove the prefix and remove whitespace
             asn_text = asn_text[len(settings.CONSUMER_ASN_BARCODE_PREFIX) :].strip()
 
@@ -275,7 +270,7 @@ class BarcodePlugin(ConsumeTaskPlugin):
             try:
                 asn = int(asn_text)
             except ValueError as e:
-                logger.warning(f"Failed to parse ASN number because: {e}")
+                self.log.warning(f"Failed to parse ASN number because: {e}")
 
         return asn
 
@@ -324,7 +319,7 @@ class BarcodePlugin(ConsumeTaskPlugin):
 
                 # This is a split index
                 # Start a new destination page listing
-                logger.debug(f"Starting new document at idx {idx}")
+                self.log.debug(f"Starting new document at idx {idx}")
                 current_document = []
                 documents.append(current_document)
                 keep_page = pages_to_split_on[idx]
@@ -335,7 +330,7 @@ class BarcodePlugin(ConsumeTaskPlugin):
 
             documents = [x for x in documents if len(x)]
 
-            logger.debug(f"Split into {len(documents)} new documents")
+            self.log.debug(f"Split into {len(documents)} new documents")
 
             # Write the new documents out
             for doc_idx, document in enumerate(documents):
@@ -344,7 +339,7 @@ class BarcodePlugin(ConsumeTaskPlugin):
 
                 output_filename = f"{fname}_document_{doc_idx}.pdf"
 
-                logger.debug(f"pdf no:{doc_idx} has {len(dst.pages)} pages")
+                self.log.debug(f"pdf no:{doc_idx} has {len(dst.pages)} pages")
                 savepath = Path(self.temp_dir.name) / output_filename
                 with open(savepath, "wb") as out:
                     dst.save(out)

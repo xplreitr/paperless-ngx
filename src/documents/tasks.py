@@ -22,6 +22,8 @@ from documents.classifier import DocumentClassifier
 from documents.classifier import load_classifier
 from documents.consumer import Consumer
 from documents.consumer import ConsumerError
+from documents.consumer import DuplicateAsnCheckerPlugin
+from documents.consumer import DuplicateFileCheckerPlugin
 from documents.consumer import WorkflowTriggerPlugin
 from documents.data_models import ConsumableDocument
 from documents.data_models import DocumentMetadataOverrides
@@ -114,6 +116,8 @@ def consume_file(
         CollatePlugin,
         BarcodePlugin,
         WorkflowTriggerPlugin,
+        DuplicateFileCheckerPlugin,
+        DuplicateAsnCheckerPlugin,
     ]
 
     with ProgressManager(

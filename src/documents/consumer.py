@@ -45,10 +45,42 @@ from documents.plugins.base import AlwaysRunPluginMixin
 from documents.plugins.base import ConsumeTaskPlugin
 from documents.plugins.base import NoCleanupPluginMixin
 from documents.plugins.base import NoSetupPluginMixin
+from documents.plugins.base import StopConsumeTaskError
+from documents.plugins.helpers import ProgressStatusOptions
 from documents.signals import document_consumption_finished
 from documents.signals import document_consumption_started
 from documents.utils import copy_basic_file_stats
 from documents.utils import copy_file_with_basic_stats
+
+
+class ConsumerError(Exception):
+    pass
+
+
+class ConsumerStatusShortMessage(str, Enum):
+    DOCUMENT_ALREADY_EXISTS = "document_already_exists"
+    ASN_ALREADY_EXISTS = "asn_already_exists"
+    ASN_RANGE = "asn_value_out_of_range"
+    FILE_NOT_FOUND = "file_not_found"
+    PRE_CONSUME_SCRIPT_NOT_FOUND = "pre_consume_script_not_found"
+    PRE_CONSUME_SCRIPT_ERROR = "pre_consume_script_error"
+    POST_CONSUME_SCRIPT_NOT_FOUND = "post_consume_script_not_found"
+    POST_CONSUME_SCRIPT_ERROR = "post_consume_script_error"
+    NEW_FILE = "new_file"
+    UNSUPPORTED_TYPE = "unsupported_type"
+    PARSING_DOCUMENT = "parsing_document"
+    GENERATING_THUMBNAIL = "generating_thumbnail"
+    PARSE_DATE = "parse_date"
+    SAVE_DOCUMENT = "save_document"
+    FINISHED = "finished"
+    FAILED = "failed"
+
+
+class ConsumerFilePhase(str, Enum):
+    STARTED = "STARTED"
+    WORKING = "WORKING"
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
 
 
 class WorkflowTriggerPlugin(
@@ -118,34 +150,80 @@ class WorkflowTriggerPlugin(
         self.metadata.update(overrides)
 
 
-class ConsumerError(Exception):
-    pass
+class DuplicateFileCheckerPlugin(
+    NoCleanupPluginMixin,
+    NoSetupPluginMixin,
+    AlwaysRunPluginMixin,
+    ConsumeTaskPlugin,
+):
+    NAME: str = "DuplicateFileCheckerPlugin"
+
+    def run(self) -> Optional[str]:
+        """
+        Check if a file is a bit for bit match against an existing file
+        """
+        checksum = hashlib.md5(self.input_doc.original_file.read_bytes()).hexdigest()
+        existing_doc = Document.objects.filter(
+            Q(checksum=checksum) | Q(archive_checksum=checksum),
+        )
+        if existing_doc.exists():
+            if settings.CONSUMER_DELETE_DUPLICATES:
+                self.input_doc.original_file.unlink()
+            msg = f"Not consuming {self.input_doc.original_file.name}: It is a duplicate of {existing_doc.get().title} (#{existing_doc.get().pk}"
+            self.log.info(msg)
+            self.status_mgr.send_progress(
+                ProgressStatusOptions.FAILED,
+                ConsumerStatusShortMessage.DOCUMENT_ALREADY_EXISTS,
+                100,
+                100,
+                extra_args={"document_id": existing_doc.pk},
+            )
+            raise StopConsumeTaskError(msg)
 
 
-class ConsumerStatusShortMessage(str, Enum):
-    DOCUMENT_ALREADY_EXISTS = "document_already_exists"
-    ASN_ALREADY_EXISTS = "asn_already_exists"
-    ASN_RANGE = "asn_value_out_of_range"
-    FILE_NOT_FOUND = "file_not_found"
-    PRE_CONSUME_SCRIPT_NOT_FOUND = "pre_consume_script_not_found"
-    PRE_CONSUME_SCRIPT_ERROR = "pre_consume_script_error"
-    POST_CONSUME_SCRIPT_NOT_FOUND = "post_consume_script_not_found"
-    POST_CONSUME_SCRIPT_ERROR = "post_consume_script_error"
-    NEW_FILE = "new_file"
-    UNSUPPORTED_TYPE = "unsupported_type"
-    PARSING_DOCUMENT = "parsing_document"
-    GENERATING_THUMBNAIL = "generating_thumbnail"
-    PARSE_DATE = "parse_date"
-    SAVE_DOCUMENT = "save_document"
-    FINISHED = "finished"
-    FAILED = "failed"
+class DuplicateAsnCheckerPlugin(
+    NoCleanupPluginMixin,
+    NoSetupPluginMixin,
+    ConsumeTaskPlugin,
+):
+    NAME: str = "DuplicateAsnCheckerPlugin"
 
+    @property
+    def able_to_run(self) -> bool:
+        """
+        Only needs to run if the metadata includes an ASN
+        """
+        self.log.info(self.metadata.asn is not None)
+        return self.metadata.asn is not None
 
-class ConsumerFilePhase(str, Enum):
-    STARTED = "STARTED"
-    WORKING = "WORKING"
-    SUCCESS = "SUCCESS"
-    FAILED = "FAILED"
+    def run(self) -> Optional[str]:
+        # Validate the range is above zero and less than uint32_t max
+        # otherwise, Whoosh can't handle it in the index
+        if (
+            self.metadata.asn < Document.ARCHIVE_SERIAL_NUMBER_MIN
+            or self.metadata.asn > Document.ARCHIVE_SERIAL_NUMBER_MAX
+        ):
+            msg = f"Not consuming {self.input_doc.original_file.name}: Given ASN {self.metadata.asn} is out of range [{Document.ARCHIVE_SERIAL_NUMBER_MIN:,}, {Document.ARCHIVE_SERIAL_NUMBER_MAX:,}]"
+            self.log.error(msg)
+            self.status_mgr.send_progress(
+                ProgressStatusOptions.FAILED,
+                ConsumerStatusShortMessage.ASN_RANGE,
+                100,
+                100,
+            )
+            raise StopConsumeTaskError(msg)
+        existing_doc = Document.objects.filter(archive_serial_number=self.metadata.asn)
+        if existing_doc.exists():
+            msg = f"Not consuming {self.input_doc.original_file.name}: Given ASN already exists!"
+            self.log.error(msg)
+            self.status_mgr.send_progress(
+                ProgressStatusOptions.FAILED,
+                ConsumerStatusShortMessage.ASN_ALREADY_EXISTS,
+                100,
+                100,
+                extra_args={"document_id": existing_doc.pk},
+            )
+            raise StopConsumeTaskError(msg)
 
 
 class Consumer(LoggingMixin):
