@@ -5,10 +5,10 @@ import tempfile
 
 from celery import chord
 from celery import group
-from documents import tasks
-from documents.models import Document
 from pikepdf import Pdf
 
+from documents import tasks
+from documents.models import Document
 
 logger = logging.getLogger("paperless.merge")
 
@@ -48,7 +48,6 @@ class PdfCache:
 
 
 def parse_page_list(page_list: str):
-
     if not page_list:
         return []
 
@@ -76,17 +75,16 @@ def parse_page_list(page_list: str):
 
 
 def copy_pdf_metadata(source: Pdf, target: Pdf):
-    with source.open_metadata() as source_meta:
-        with target.open_metadata() as target_meta:
-            for k in source_meta:
-                try:
-                    target_meta[k] = source_meta[k]
-                except TypeError:
-                    # TODO: https://github.com/pikepdf/pikepdf/issues/188
-                    logger.warning(
-                        f"Could not copy metadata {k} while " f"merging documents",
-                        exc_info=True,
-                    )
+    with source.open_metadata() as source_meta, target.open_metadata() as target_meta:
+        for k in source_meta:
+            try:
+                target_meta[k] = source_meta[k]
+            except TypeError:
+                # TODO: https://github.com/pikepdf/pikepdf/issues/188
+                logger.warning(
+                    f"Could not copy metadata {k} while merging documents",
+                    exc_info=True,
+                )
 
 
 def copy_document_metadata(document: Document, consume_task):
@@ -107,7 +105,6 @@ def execute_split_merge_plan(
     delete_source: bool = False,
     preview: bool = True,
 ):
-
     consume_tasks = []
     cache = PdfCache()
     source_documents = set()
@@ -127,7 +124,7 @@ def execute_split_merge_plan(
                 version = target_pdf.pdf_version
                 consume_task_kwargs = {}
 
-                for (i, source_doc_spec) in enumerate(target_doc_spec):
+                for i, source_doc_spec in enumerate(target_doc_spec):
                     source_document_id = source_doc_spec["document"]
                     source_documents.add(source_document_id)
 
@@ -182,7 +179,6 @@ def execute_split_merge_plan(
         cache.close_all()
 
     if not preview:
-
         if delete_source:
             chord(
                 header=consume_tasks,

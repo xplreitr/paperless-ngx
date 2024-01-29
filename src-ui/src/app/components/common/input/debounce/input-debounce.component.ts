@@ -1,14 +1,19 @@
-import { Component, Input, Output, ElementRef, EventEmitter } from '@angular/core';
-import { fromEvent } from 'rxjs';
-import { map, debounceTime, distinctUntilChanged } from 'rxjs/operators';
+import {
+  Component,
+  Input,
+  Output,
+  ElementRef,
+  EventEmitter,
+} from '@angular/core'
+import { fromEvent } from 'rxjs'
+import { map, debounceTime, distinctUntilChanged } from 'rxjs/operators'
 
 @Component({
-  selector: 'app-input-debounce',
+  selector: 'pngx-input-debounce',
   templateUrl: './input-debounce.component.html',
-  styleUrls: ['./input-debounce.component.scss']
+  styleUrls: ['./input-debounce.component.scss'],
 })
 export class InputDebounceComponent {
-
   @Input()
   placeholder: string
 
@@ -32,21 +37,22 @@ export class InputDebounceComponent {
   value: EventEmitter<string> = new EventEmitter<string>()
 
   @Input()
-  inputValue: string;
+  inputValue: string
 
   constructor(private elementRef: ElementRef) {
-    fromEvent(elementRef.nativeElement, 'keyup').pipe(
-      map(() => this.inputValue),
-      debounceTime(this.delay),
-      distinctUntilChanged()
-    ).subscribe(input =>
-      this.value.emit(input)
-    );
+    fromEvent(elementRef.nativeElement, 'keyup')
+      .pipe(
+        map(() => this.inputValue),
+        debounceTime(this.delay),
+        distinctUntilChanged()
+      )
+      .subscribe((input) => this.value.emit(input))
   }
 
   keyUp(event: any) {
     if (!this._pattern) return
-    if (event.key.length == 1 && !this._pattern.test(event.key)) { // e.g. dont do for backspace
+    if (event.key.length == 1 && !this._pattern.test(event.key)) {
+      // e.g. dont do for backspace
       // invalid character, prevent input
       event.preventDefault()
       event.stopImmediatePropagation()
@@ -62,5 +68,4 @@ export class InputDebounceComponent {
     this.inputValue = ''
     this.value.emit(this.inputValue)
   }
-
 }

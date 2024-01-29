@@ -77,12 +77,8 @@
                 </button>
                 <div ngbDropdownMenu aria-labelledby="dropdownSelect" class="shadow">
                   <button ngbDropdownItem (click)="redoOcrSelected()" [disabled]="!userCanEditAll" i18n>Redo OCR</button>
+                  <button ngbDropdownItem (click)="addToSplitMerge()" [disabled]="!userCanEditAll" i18n>Add to split/merge</button>
                 </div>
-                <button ngbDropdownItem (click)="addToSplitMerge()">
-                  <svg class="buttonicon" fill="currentColor">
-                    <use xlink:href="assets/bootstrap-icons.svg#scissors" />
-                  </svg><span class="d-none d-lg-inline ps-2" i18n>Add to split/merge</span>
-                </button>
               </div>
             </div>
 

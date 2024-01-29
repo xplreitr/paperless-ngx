@@ -164,7 +164,7 @@ $form-check-radio-checked-bg-image-dark: url("data:image/svg+xml,<svg xmlns='htt
     border-color: var(--bs-border-color);
   }
 
-  app-tag .badge {
+  pngx-tag .badge {
     filter: brightness(.8);
   }
 
@@ -293,6 +293,7 @@ $form-check-radio-checked-bg-image-dark: url("data:image/svg+xml,<svg xmlns='htt
 
   .tooltip {
     --bs-tooltip-bg: #000;
+    --bs-tooltip-color: var(--bs-body-color);
   }
 }
 

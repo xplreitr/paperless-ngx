@@ -64,3 +64,8 @@ export interface Document extends ObjectWithPermissions {
 
   custom_fields?: CustomFieldInstance[]
 }
+
+export interface DocumentPart extends Document {
+  pages?: number[]
+  is_separator?: boolean
+}

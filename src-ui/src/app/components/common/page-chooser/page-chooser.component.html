@@ -3,9 +3,9 @@
   <button type="button" class="btn-close" aria-label="Close" (click)="cancelClicked()"></button>
 </div>
 <div class="modal-body">
-  <pdf-viewer class="page-chooser-viewer" [class.splitting]="splitting" [src]="previewUrl" [original-size]="false" [zoom]=".25" [autoresize]="true" [show-borders]="true" [show-all]="true" [render-text-mode]="2" (page-rendered)="afterPageRendered($event)" (after-load-complete)="pdfLoaded($event)"></pdf-viewer>
+  <pngx-pdf-viewer class="page-chooser-viewer" [class.splitting]="splitting" [src]="previewUrl" [original-size]="false" [zoom]=".25" [autoresize]="true" [show-borders]="true" [show-all]="true" [render-text-mode]="2" (page-rendered)="afterPageRendered($event)" (after-load-complete)="pdfLoaded($event)"></pngx-pdf-viewer>
 </div>
 <div class="modal-footer">
   <button type="button" class="btn btn-outline-danger" (click)="cancelClicked()" i18n>Cancel</button>
-  <button type="button" class="btn btn-outline-primary" (click)="confirmClicked()" [disabled]="pages.length == 0">{{title}}</button>
+  <button type="button" class="btn btn-outline-primary" (click)="confirmClicked()" [disabled]="pages.length === 0">{{title}}</button>
 </div>

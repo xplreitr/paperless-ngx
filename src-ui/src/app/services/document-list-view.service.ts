@@ -355,7 +355,7 @@ export class DocumentListViewService {
     return this.activeListViewState.selected
   }
 
-  get selectedDocuments(): PaperlessDocument[] {
+  get selectedDocuments(): Document[] {
     return this.activeListViewState.documents.filter((d) =>
       this.activeListViewState.selected.has(d.id)
     )

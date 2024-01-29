@@ -4,19 +4,22 @@ import { SplitMergeMetadata } from 'src/app/data/split-merge-request'
 import { SplitMergeService } from 'src/app/services/split-merge.service'
 import { DocumentService } from 'src/app/services/rest/document.service'
 import { DocumentListViewService } from 'src/app/services/document-list-view.service'
-import {
-  PaperlessDocument,
-  PaperlessDocumentPart,
-} from 'src/app/data/paperless-document'
-import { DndDropEvent } from 'ngx-drag-drop'
 import { Subject, Subscription } from 'rxjs'
 import { debounceTime } from 'rxjs/operators'
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap'
 import { PageChooserComponent } from 'src/app/components/common/page-chooser/page-chooser.component'
-import { PDFDocumentProxy } from 'ng2-pdf-viewer'
+import { Document, DocumentPart } from 'src/app/data/document'
+import {
+  CdkDragDrop,
+  CdkDragEnd,
+  CdkDragStart,
+  moveItemInArray,
+} from '@angular/cdk/drag-drop'
+import { PDFDocumentProxy } from '../common/pdf-viewer/typings'
+import { SettingsService } from 'src/app/services/settings.service'
 
 @Component({
-  selector: 'app-split-merge',
+  selector: 'pngx-split-merge',
   templateUrl: './split-merge.component.html',
   styleUrls: ['./split-merge.component.scss'],
 })
@@ -41,6 +44,7 @@ export class SplitMergeComponent implements OnInit, OnDestroy {
     public splitMergeService: SplitMergeService,
     private documentService: DocumentService,
     private list: DocumentListViewService,
+    private settingsService: SettingsService,
     private router: Router,
     private modalService: NgbModal
   ) {}
@@ -63,7 +67,7 @@ export class SplitMergeComponent implements OnInit, OnDestroy {
     this.previewDebounce$.complete()
   }
 
-  get documents(): PaperlessDocument[] {
+  get documents(): Array<DocumentPart> {
     return this.splitMergeService.getDocuments()
   }
 
@@ -79,17 +83,18 @@ export class SplitMergeComponent implements OnInit, OnDestroy {
     this.router.navigate(['documents'])
   }
 
-  onDragged(document: PaperlessDocument, documents: PaperlessDocument[]) {
-    const index = this.documents.indexOf(document)
-    this.documents.splice(index, 1)
+  onDragStart(event: CdkDragStart) {
+    this.settingsService.globalDropzoneEnabled = false
   }
 
-  onDrop(event: DndDropEvent, documents: PaperlessDocument[]) {
-    let index = event.index
-    if (typeof index === 'undefined') {
-      index = this.documents.length
-    }
-    this.documents.splice(index, 0, event.data)
+  onDragEnd(event: CdkDragEnd) {
+    this.settingsService.globalDropzoneEnabled = true
+  }
+
+  onDrop(event: CdkDragDrop<Document[]>) {
+    if (event.previousIndex == event.currentIndex) return
+
+    moveItemInArray(this.documents, event.previousIndex, event.currentIndex)
     this.previewDebounce$.next(null)
   }
 
@@ -127,13 +132,13 @@ export class SplitMergeComponent implements OnInit, OnDestroy {
       )
   }
 
-  removeDocument(d: PaperlessDocument, index: number) {
+  removeDocument(d: Document, index: number) {
     this.splitMergeService.removeDocument(d, index)
     this.previewNumPages[index] = this.previewCurrentPages[index] = undefined
     this.previewDebounce$.next(null)
   }
 
-  choosePages(d: PaperlessDocument, index: number) {
+  choosePages(d: Document, index: number) {
     let modal = this.modalService.open(PageChooserComponent, {
       backdrop: 'static',
       size: 'lg',
@@ -147,13 +152,13 @@ export class SplitMergeComponent implements OnInit, OnDestroy {
     })
   }
 
-  chooseSplit(d: PaperlessDocument, index: number) {
+  chooseSplit(d: Document, index: number) {
     let modal = this.modalService.open(PageChooserComponent, {
       backdrop: 'static',
       size: 'lg',
     })
     modal.componentInstance.document = d
-    const enabledPages = (d as PaperlessDocumentPart).pages
+    const enabledPages = (d as DocumentPart).pages
     modal.componentInstance.splitting = true
     modal.componentInstance.confirmPages.subscribe((pages) => {
       this.splitMergeService.splitDocument(d, index, pages, enabledPages)
@@ -163,7 +168,7 @@ export class SplitMergeComponent implements OnInit, OnDestroy {
     })
   }
 
-  pagesFieldChange(pageStr: string, d: PaperlessDocument, index: number) {
+  pagesFieldChange(pageStr: string, d: Document, index: number) {
     let pages = pageStr.split(',').map((p) => {
       if (p.indexOf('-') !== -1) {
         const minmax = p.split('-')
@@ -217,6 +222,8 @@ export class SplitMergeComponent implements OnInit, OnDestroy {
   }
 
   pdfPageRendered(event: any, index) {
+    console.log(event)
+
     // CustomEvent is es6
     if (event.pageNumber > 0 && this.previewCurrentPages[index] == undefined)
       this.previewCurrentPages[index] = 1

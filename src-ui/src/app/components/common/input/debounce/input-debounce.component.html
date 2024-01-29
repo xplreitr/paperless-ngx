@@ -1,2 +1,4 @@
 <input type="text" [class]="cssClasses" [placeholder]="placeholder" [(ngModel)]="inputValue" (keyup)="keyUp($event)" />
-<span *ngIf="allowClear && inputValue?.length > 0" class="clear-wrapper" title="Clear all" (click)="clear()"><span aria-hidden="true" class="clear">×</span></span>
+@if (allowClear && inputValue?.length > 0) {
+  <span class="clear-wrapper" title="Clear all" (click)="clear()"><span aria-hidden="true" class="clear">×</span></span>
+}

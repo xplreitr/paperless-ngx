@@ -249,7 +249,10 @@ export class AppFrameComponent
   }
 
   get splitMergeToolVisible() {
-    return this.splitMergeService.hasDocuments()
+    return (
+      this.splitMergeService.hasDocuments() ||
+      this.router.url.includes('split_merge')
+    )
   }
 
   onDragStart(event: CdkDragStart) {

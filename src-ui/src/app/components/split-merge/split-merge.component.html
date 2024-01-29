@@ -1,21 +1,17 @@
-<app-page-header i18n-title title="Split & Merge Editor">
+<pngx-page-header i18n-title title="Split & Merge Editor">
   <div class="btn-group mt-2 mt-sm-0">
     <button class="btn btn-sm btn-outline-primary" i18n-title title="Add Documents" (click)="chooseDocuments()">
-      <svg width="1em" height="1em" viewBox="0 0 16 16" fill="currentColor">
-        <use xlink:href="assets/bootstrap-icons.svg#plus-circle" />
-      </svg>&nbsp;<ng-container i18n>Add Documents</ng-container>
+      <i-bs name="plus-circle"></i-bs>&nbsp;<ng-container i18n>Add Documents</ng-container>
     </button>
   </div>
   <div class="btn-group ms-2 mt-2 mt-sm-0">
     <button type="button" class="btn btn-sm btn-outline-primary"
-      [popoverTitle]="optionsTitle" [autoClose]="'outside'" [ngbPopover]="optionsPopoverBody" popoverClass="shadow" #optionsPopover="ngbPopover">
-      <svg width="1em" height="1em" viewBox="0 0 16 16" fill="currentColor">
-        <use xlink:href="assets/bootstrap-icons.svg#gear" />
-      </svg>&nbsp;<ng-container i18n>Options</ng-container>
+      [popoverTitle]="optionsTitle" [autoClose]="'outside'" [ngbPopover]="optionsPopoverBody" popoverClass="options-popover shadow" #optionsPopover="ngbPopover">
+      <i-bs name="gear"></i-bs>&nbsp;<ng-container i18n>Options</ng-container>
     </button>
     <ng-template #optionsTitle>
       <ng-container i18n>Options</ng-container>
-      <button type="button" class="btn-close" aria-label="Close" (click)="optionsPopover.close()"></button>
+      <button type="button" class="btn-close btn-sm" aria-label="Close" (click)="optionsPopover.close()"></button>
     </ng-template>
     <ng-template #optionsPopoverBody>
       <div class="form-group row text-dark">
@@ -45,112 +41,120 @@
 
   <div class="btn-group ms-2 me-2 me-sm-5 mt-2 mt-sm-0">
     <button class="btn btn-sm btn-outline-primary" i18n-title title="Save" (click)="save()" [disabled]="splitMergeService.getDocuments().length < 1">
-      <svg width="1em" height="1em" viewBox="0 0 16 16" fill="currentColor">
-        <use xlink:href="assets/bootstrap-icons.svg#check-circle" />
-      </svg>&nbsp;<ng-container i18n>Save</ng-container>
+      <i-bs name="check-circle"></i-bs>&nbsp;<ng-container i18n>Save</ng-container>
     </button>
   </div>
 
   <div class="btn-group ms-sm-5 mt-2 mt-sm-0">
     <button class="btn btn-sm btn-outline-danger" i18n-title title="Cancel" (click)="cancel()">
-      <svg width="1em" height="1em" viewBox="0 0 16 16" fill="currentColor">
-        <use xlink:href="assets/bootstrap-icons.svg#slash-circle" />
-      </svg>&nbsp;<ng-container i18n>Cancel</ng-container>
+      <i-bs name="slash-circle"></i-bs>&nbsp;<ng-container i18n>Cancel</ng-container>
     </button>
   </div>
-</app-page-header>
+</pngx-page-header>
 
 <div class="row">
-  <div class="col-md-6 col-lg-5">
-    <div class="h-100" dndDropzone (dndDrop)="onDrop($event, documents)">
-      <div class="spacer bg-primary" dndPlaceholderRef>
-      </div>
-      <div *ngFor="let d of documents; let i = index" class="card w-100 mb-3" [class.separator-card]="d.is_separator" [dndDraggable]="d" dndEffectAllowed="move" (dndMoved)="onDragged(d, documents)">
-        <ng-container *ngIf="d.is_separator">
+  <div class="h-100 col-md-6 col-lg-5" cdkDropList (cdkDropListDropped)="onDrop($event)">
+    @for (d of documents; track d; let i = $index) {
+      <div class="card mb-3" [class.separator-card]="d.is_separator"
+        cdkDrag cdkDragPreviewContainer="parent"
+        cdkDragLockAxis="y"
+        (cdkDragStarted)="onDragStart($event)"
+        (cdkDragEnded)="onDragEnd($event)">
+        @if (d.is_separator) {
           <div class="separator"></div>
           <h6 class="text-muted small font-weight-bold d-inline-block py-2 px-3 mb-0 mx-auto bg-body" i18n>Document End</h6>
           <button class="btn btn-sm btn-danger" title="Remove" (click)="removeDocument(d, i)">
-            <svg width="1em" height="1em" viewBox="0 0 16 16" fill="currentColor">
-              <use xlink:href="assets/bootstrap-icons.svg#trash" />
-            </svg>
+            <i-bs name="trash"></i-bs>
           </button>
-        </ng-container>
-        <div *ngIf="!d.is_separator" class="row no-gutters">
-          <div class="col-md-3 bg-light d-flex p-0 handle" dndHandle>
-            <svg width="2em" height="100%" viewBox="0 0 16 16" fill="currentColor" class="mx-auto">
-              <use xlink:href="assets/bootstrap-icons.svg#grip-horizontal" />
-            </svg>
-            <div class="doc-thumb" [style.background-image]="'url(' + getThumbUrl(d.id) + ')'"></div>
-          </div>
-          <div class="col-md-9">
-            <div class="card-body p-3">
-              <h6 class="card-title mb-2">{{d.title}}</h6>
-              <div class="card-actions">
-                <div class="btn-toolbar btn-toolbar-sm justify-content-between w-100">
-                  <button class="btn btn-sm btn-outline-danger flex-fill" i18n-title title="Remove" (click)="removeDocument(d, i)">
-                    <svg width="1em" height="1em" viewBox="0 0 16 16" fill="currentColor">
-                      <use xlink:href="assets/bootstrap-icons.svg#trash" />
-                    </svg><span class="d-none d-xl-inline">&nbsp;<ng-container i18n>Remove</ng-container></span>
-                  </button>
-                  <button class="btn btn-sm btn-outline-primary ms-3 flex-fill" i18n-title title="Split" (click)="chooseSplit(d, i)">
-                    <svg width="1em" height="1em" viewBox="0 0 16 16" fill="currentColor">
-                      <use xlink:href="assets/bootstrap-icons.svg#scissors" />
-                    </svg><span class="d-none d-xl-inline">&nbsp;<ng-container i18n>Split</ng-container></span>
-                  </button>
-                </div>
-                <div class="input-group input-group-sm w-100 mt-3">
-                  <div class="input-group-text"><ng-container i18n>Pages</ng-container>:</div>
-                  <app-input-debounce delay="500" classes="form-control-sm" placeholder="All" ngbTooltip="e.g. 1-3,5" pattern="[0-9\,\-]" [inputValue]="formatPages(d.pages)" (value)="pagesFieldChange($event, d, i)"></app-input-debounce>
-                  <button class="btn btn-outline-primary" type="button" i18n-title title="Select Pages" (click)="choosePages(d, i)">
-                    <svg width="1em" height="1em" viewBox="0 0 16 16" fill="currentColor">
-                      <use xlink:href="assets/bootstrap-icons.svg#pencil" />
-                    </svg><span class="d-none d-xl-inline">&nbsp;<ng-container i18n>Select Pages</ng-container></span>
-                  </button>
+        } @else {
+          <div class="row no-gutters">
+            <div class="col-md-3 bg-light d-flex align-items-center p-0 handle">
+              <i-bs class="px-2" width="1.5em" height="1.5em" name="grip-vertical"></i-bs>
+              <div class="doc-thumb" [style.background-image]="'url(' + getThumbUrl(d.id) + ')'"></div>
+            </div>
+            <div class="col-md-9">
+              <div class="card-body p-3">
+                <h6 class="card-title mb-2">{{d.title}}</h6>
+                <div class="card-actions">
+                  <div class="btn-toolbar btn-toolbar-sm justify-content-between w-100">
+                    <button class="btn btn-sm btn-outline-danger flex-fill" i18n-title title="Remove" (click)="removeDocument(d, i)">
+                      <i-bs name="trash"></i-bs>&nbsp;<ng-container i18n>Remove</ng-container>
+                    </button>
+                    <button class="btn btn-sm btn-outline-primary ms-3 flex-fill" i18n-title title="Split" (click)="chooseSplit(d, i)">
+                      <i-bs name="scissors"></i-bs>&nbsp;<ng-container i18n>Split</ng-container>
+                    </button>
+                  </div>
+                  <div class="input-group input-group-sm w-100 mt-3">
+                    <div class="input-group-text"><ng-container i18n>Pages</ng-container>:</div>
+                    <pngx-input-debounce delay="500" classes="form-control-sm" placeholder="All" ngbTooltip="e.g. 1-3,5" pattern="[0-9\,\-]" [inputValue]="formatPages(d.pages)" (value)="pagesFieldChange($event, d, i)"></pngx-input-debounce>
+                    <button class="btn btn-outline-primary" type="button" i18n-title title="Select Pages" (click)="choosePages(d, i)">
+                      <i-bs name="pencil"></i-bs>&nbsp;<ng-container i18n>Select Pages</ng-container>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        }
       </div>
-    </div>
+    }
   </div>
   <div class="col-md-6 col-lg-7">
-    <ngb-alert *ngIf="error" type="danger" class="mt-2 mb-0" [dismissible]="false">
-      <h6 class="alert-heading" i18n>An error occurred during operation</h6>
-      <p class="mb-0 pb-1" i18n>Please check document settings and parts.</p>
-      <p class="mb-0 pb-1 small"><ng-container i18n>Message</ng-container>: <span class="font-italic">{{error}}</span></p>
-    </ngb-alert>
-    <ng-container *ngIf="!error && previewUrls.length > 1">
+    @if (error) {
+      <ngb-alert type="danger" class="mt-2 mb-0" [dismissible]="false">
+        <h6 class="alert-heading" i18n>An error occurred during operation</h6>
+        <p class="mb-0 pb-1" i18n>Please check document settings and parts.</p>
+        <p class="mb-0 pb-1 small"><ng-container i18n>Message</ng-container>: <span class="font-italic">{{error}}</span></p>
+      </ngb-alert>
+    } @else if (!error && previewUrls.length > 1) {
       <ul ngbNav #previewNav="ngbNav" class="nav-tabs">
-        <li *ngFor="let previewUrl of previewUrls; let j = index" [ngbNavItem]="j">
-          <a ngbNavLink><ng-container i18n>Document</ng-container> {{j + 1}}</a>
-          <ng-template ngbNavContent>
-            <div class="preview-container px-2 tabbed text-center bg-light">
-              <ng-container [ngTemplateOutlet]="previewHeader" [ngTemplateOutletContext]="{ $implicit: j }"></ng-container>
-              <pdf-viewer [src]="previewUrl" [original-size]="false" [show-borders]="true" [show-all]="true" [render-text-mode]="2" [(page)]="previewCurrentPages[j]" (after-load-complete)="pdfPreviewLoaded($event, j)" (page-rendered)="pdfPageRendered($event, j)"></pdf-viewer>
-            </div>
-          </ng-template>
-        </li>
+        @for (previewUrl of previewUrls; track previewUrl; let j = $index) {
+          <li [ngbNavItem]="j">
+            <a ngbNavLink><ng-container i18n>Document</ng-container> {{j + 1}}</a>
+            <ng-template ngbNavContent>
+              <div class="preview-container px-2 tabbed text-center bg-light">
+                <ng-container [ngTemplateOutlet]="previewHeader" [ngTemplateOutletContext]="{ $implicit: j }"></ng-container>
+                <pngx-pdf-viewer [src]="previewUrl" [original-size]="false" [show-borders]="true" [show-all]="true" [render-text-mode]="2" [(page)]="previewCurrentPages[j]" (after-load-complete)="pdfPreviewLoaded($event, j)" (page-rendered)="pdfPageRendered($event, j)"></pngx-pdf-viewer>
+              </div>
+            </ng-template>
+          </li>
+        }
       </ul>
       <div [ngbNavOutlet]="previewNav"></div>
-    </ng-container>
-    <div *ngIf="!error && previewUrls.length <= 1" class="preview-container px-2 text-center bg-light">
-      <ng-container [ngTemplateOutlet]="previewHeader" [ngTemplateOutletContext]="{ $implicit: 0 }"></ng-container>
-      <pdf-viewer *ngIf="previewUrls.length > 0" [src]="previewUrls[0]" [original-size]="false" [show-borders]="true" [show-all]="true" [render-text-mode]="2" [(page)]="previewCurrentPages[0]" (after-load-complete)="pdfPreviewLoaded($event, 0)" (page-rendered)="pdfPageRendered($event, 0)"></pdf-viewer>
-    </div>
+    } @else if (!error && previewUrls.length <= 1) {
+      <div class="preview-container px-2 text-center bg-light">
+        <ng-container [ngTemplateOutlet]="previewHeader" [ngTemplateOutletContext]="{ $implicit: 0 }"></ng-container>
+        @if (previewUrls.length > 0) {
+          <pngx-pdf-viewer
+            [src]="previewUrls[0]"
+            [original-size]="false"
+            [show-borders]="true"
+            [show-all]="true"
+            [render-text-mode]="2"
+            [(page)]="previewCurrentPages[0]"
+            (after-load-complete)="pdfPreviewLoaded($event,0)"
+            (page-rendered)="pdfPageRendered($event, 0)">
+          </pngx-pdf-viewer>
+        }
+      </div>
+    }
   </div>
 </div>
 
 <ng-template #previewHeader let-index>
   <div class="d-flex mt-2 p-2 w-100 justify-space-between">
-    <h6 class="text-muted mt-1" [class.mx-auto]="previewNumPages[index] == undefined" [class.me-auto]="previewNumPages[index] !== undefined" i18n>Preview</h6>
-    <div *ngIf="previewNumPages[index] !== undefined" class="input-group input-group-sm w-auto">
-      <div class="input-group-text" i18n>Page</div>
-      <input class="form-control flex-grow-0 w-auto" type="number" min="1" [max]="previewNumPages[index]" [(ngModel)]="previewCurrentPages[index]" />
-      <div class="input-group-text" i18n>of {{previewNumPages[index]}}</div>
+    <h6 class="text-muted mt-1" [class.mx-auto]="previewNumPages[index] === undefined" [class.me-auto]="previewNumPages[index] !== undefined" i18n>Preview</h6>
+    @if (previewNumPages[index] !== undefined) {
+      <div class="input-group input-group-sm w-auto">
+        <div class="input-group-text" i18n>Page</div>
+        <input class="form-control flex-grow-0 w-auto" type="number" min="1" [max]="previewNumPages[index]" [(ngModel)]="previewCurrentPages[index]" />
+        <div class="input-group-text" i18n>of {{previewNumPages[index]}}</div>
+      </div>
+    }
+  </div>
+  @if (loading) {
+    <div class="spinner-border" role="status">
+      <span class="visually-hidden" i18n>Loading...</span>
     </div>
-  </div>
-  <div *ngIf="loading" class="spinner-border" role="status">
-    <span class="visually-hidden" i18n>Loading...</span>
-  </div>
+  }
 </ng-template>

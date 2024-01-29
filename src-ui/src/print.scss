@@ -22,7 +22,7 @@
     display: table-cell !important;
   }
 
-  app-document-list table {
+  pngx-document-list table {
     thead th:first-child, tbody td:first-child { // hide checkboxes
       display: none;
     }
