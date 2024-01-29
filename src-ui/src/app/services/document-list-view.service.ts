@@ -1,15 +1,15 @@
 import { Injectable } from '@angular/core'
 import { ParamMap, Router } from '@angular/router'
-import { Observable } from 'rxjs'
+import { Observable, Subject, first, takeUntil } from 'rxjs'
+import { FilterRule } from '../data/filter-rule'
 import {
   filterRulesDiffer,
   cloneFilterRules,
-  FilterRule,
   isFullTextFilterRule,
-} from '../data/filter-rule'
-import { PaperlessDocument } from '../data/paperless-document'
-import { PaperlessSavedView } from '../data/paperless-saved-view'
-import { SETTINGS_KEYS } from '../data/paperless-uisettings'
+} from '../utils/filter-rules'
+import { Document } from '../data/document'
+import { SavedView } from '../data/saved-view'
+import { SETTINGS_KEYS } from '../data/ui-settings'
 import { DOCUMENT_LIST_SERVICE } from '../data/storage-keys'
 import { paramsFromViewState, paramsToViewState } from '../utils/query-params'
 import {
@@ -31,7 +31,7 @@ export interface ListViewState {
   /**
    * Current paginated list of documents displayed.
    */
-  documents?: PaperlessDocument[]
+  documents?: Document[]
 
   currentPage: number
 
@@ -81,6 +81,8 @@ export class DocumentListViewService {
   selectionData?: SelectionData
 
   currentPageSize: number = this.settings.get(SETTINGS_KEYS.DOCUMENT_LIST_SIZE)
+
+  private unsubscribeNotifier: Subject<any> = new Subject()
 
   private listViewStates: Map<number, ListViewState> = new Map()
 
@@ -143,7 +145,11 @@ export class DocumentListViewService {
     return this.listViewStates.get(this._activeSavedViewId)
   }
 
-  activateSavedView(view: PaperlessSavedView) {
+  public cancelPending(): void {
+    this.unsubscribeNotifier.next(true)
+  }
+
+  activateSavedView(view: SavedView) {
     this.rangeSelectionAnchorIndex = this.lastRangeSelectionToIndex = null
     if (view) {
       this._activeSavedViewId = view.id
@@ -153,16 +159,13 @@ export class DocumentListViewService {
     }
   }
 
-  activateSavedViewWithQueryParams(
-    view: PaperlessSavedView,
-    queryParams: ParamMap
-  ) {
+  activateSavedViewWithQueryParams(view: SavedView, queryParams: ParamMap) {
     const viewState = paramsToViewState(queryParams)
     this.activateSavedView(view)
     this.currentPage = viewState.currentPage
   }
 
-  loadSavedView(view: PaperlessSavedView, closeCurrentView: boolean = false) {
+  loadSavedView(view: SavedView, closeCurrentView: boolean = false) {
     if (closeCurrentView) {
       this._activeSavedViewId = null
     }
@@ -205,11 +208,12 @@ export class DocumentListViewService {
       this.activeListViewState.sortField = newState.sortField
       this.activeListViewState.sortReverse = newState.sortReverse
       this.activeListViewState.currentPage = newState.currentPage
-      this.reload(null, paramsEmpty) // update the params if there arent any
+      this.reload(null, paramsEmpty) // update the params if there aren't any
     }
   }
 
   reload(onFinish?, updateQueryParams: boolean = true) {
+    this.cancelPending()
     this.isReloading = true
     this.error = null
     let activeListViewState = this.activeListViewState
@@ -222,6 +226,7 @@ export class DocumentListViewService {
         activeListViewState.filterRules,
         { truncate_content: true }
       )
+      .pipe(takeUntil(this.unsubscribeNotifier))
       .subscribe({
         next: (result) => {
           this.initialized = true
@@ -230,7 +235,8 @@ export class DocumentListViewService {
           activeListViewState.documents = result.results
 
           this.documentService
-            .getSelectionData(result.results.map((d) => d.id))
+            .getSelectionData(result.all)
+            .pipe(first())
             .subscribe({
               next: (selectionData) => {
                 this.selectionData = selectionData
@@ -275,9 +281,9 @@ export class DocumentListViewService {
               errorMessage = Object.keys(error.error)
                 .map((fieldName) => {
                   const fieldError: Array<string> = error.error[fieldName]
-                  return `${
-                    DOCUMENT_SORT_FIELDS.find((f) => f.field == fieldName)?.name
-                  }: ${fieldError[0]}`
+                  return `${DOCUMENT_SORT_FIELDS.find(
+                    (f) => f.field == fieldName
+                  )?.name}: ${fieldError[0]}`
                 })
                 .join(', ')
             } else {
@@ -341,7 +347,7 @@ export class DocumentListViewService {
     this.saveDocumentListView()
   }
 
-  get documents(): PaperlessDocument[] {
+  get documents(): Document[] {
     return this.activeListViewState.documents
   }
 
@@ -381,6 +387,7 @@ export class DocumentListViewService {
   quickFilter(filterRules: FilterRule[]) {
     this._activeSavedViewId = null
     this.filterRules = filterRules
+    this.router.navigate(['documents'])
   }
 
   getLastPage(): number {
@@ -490,18 +497,18 @@ export class DocumentListViewService {
     })
   }
 
-  isSelected(d: PaperlessDocument) {
+  isSelected(d: Document) {
     return this.selected.has(d.id)
   }
 
-  toggleSelected(d: PaperlessDocument): void {
+  toggleSelected(d: Document): void {
     if (this.selected.has(d.id)) this.selected.delete(d.id)
     else this.selected.add(d.id)
     this.rangeSelectionAnchorIndex = this.documentIndexInCurrentView(d.id)
     this.lastRangeSelectionToIndex = null
   }
 
-  selectRangeTo(d: PaperlessDocument) {
+  selectRangeTo(d: Document) {
     if (this.rangeSelectionAnchorIndex !== null) {
       const documentToIndex = this.documentIndexInCurrentView(d.id)
       const fromIndex = Math.min(

@@ -1,4 +1,3 @@
-import { formatDate } from '@angular/common'
 import {
   Component,
   EventEmitter,
@@ -27,7 +26,7 @@ export enum RelativeDate {
 }
 
 @Component({
-  selector: 'app-date-dropdown',
+  selector: 'pngx-date-dropdown',
   templateUrl: './date-dropdown.component.html',
   styleUrls: ['./date-dropdown.component.scss'],
   providers: [{ provide: NgbDateAdapter, useClass: ISODateAdapter }],
@@ -39,20 +38,24 @@ export class DateDropdownComponent implements OnInit, OnDestroy {
 
   relativeDates = [
     {
-      date: RelativeDate.LAST_7_DAYS,
+      id: RelativeDate.LAST_7_DAYS,
       name: $localize`Last 7 days`,
+      date: new Date().setDate(new Date().getDate() - 7),
     },
     {
-      date: RelativeDate.LAST_MONTH,
+      id: RelativeDate.LAST_MONTH,
       name: $localize`Last month`,
+      date: new Date().setMonth(new Date().getMonth() - 1),
     },
     {
-      date: RelativeDate.LAST_3_MONTHS,
+      id: RelativeDate.LAST_3_MONTHS,
       name: $localize`Last 3 months`,
+      date: new Date().setMonth(new Date().getMonth() - 3),
     },
     {
-      date: RelativeDate.LAST_YEAR,
+      id: RelativeDate.LAST_YEAR,
       name: $localize`Last year`,
+      date: new Date().setFullYear(new Date().getFullYear() - 1),
     },
   ]
 
@@ -81,6 +84,9 @@ export class DateDropdownComponent implements OnInit, OnDestroy {
 
   @Output()
   datesSet = new EventEmitter<DateSelection>()
+
+  @Input()
+  disabled: boolean = false
 
   get isActive(): boolean {
     return (

@@ -1,6 +1,7 @@
 import itertools
 
 from django.db.models import Q
+
 from documents.models import Correspondent
 from documents.models import Document
 from documents.models import DocumentType
@@ -8,7 +9,6 @@ from documents.models import StoragePath
 from documents.permissions import set_permissions_for_object
 from documents.tasks import bulk_update_documents
 from documents.tasks import update_document_archive_file
-from documents.tasks import update_owner_for_object
 
 
 def set_correspondent(doc_ids, correspondent):
@@ -55,7 +55,6 @@ def set_document_type(doc_ids, document_type):
 
 
 def add_tag(doc_ids, tag):
-
     qs = Document.objects.filter(Q(id__in=doc_ids) & ~Q(tags__id=tag))
     affected_docs = [doc.id for doc in qs]
 
@@ -71,7 +70,6 @@ def add_tag(doc_ids, tag):
 
 
 def remove_tag(doc_ids, tag):
-
     qs = Document.objects.filter(Q(id__in=doc_ids) & Q(tags__id=tag))
     affected_docs = [doc.id for doc in qs]
 
@@ -123,7 +121,6 @@ def delete(doc_ids):
 
 
 def redo_ocr(doc_ids):
-
     for document_id in doc_ids:
         update_document_archive_file.delay(
             document_id=document_id,
@@ -133,10 +130,9 @@ def redo_ocr(doc_ids):
 
 
 def set_permissions(doc_ids, set_permissions, owner=None):
-
     qs = Document.objects.filter(id__in=doc_ids)
 
-    update_owner_for_object.delay(document_ids=doc_ids, owner=owner)
+    qs.update(owner=owner)
 
     for doc in qs:
         set_permissions_for_object(set_permissions, doc)

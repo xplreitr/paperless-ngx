@@ -1,10 +1,11 @@
+from rest_framework import serializers
+
 from documents.serialisers import CorrespondentField
 from documents.serialisers import DocumentTypeField
 from documents.serialisers import OwnedObjectSerializer
 from documents.serialisers import TagsField
 from paperless_mail.models import MailAccount
 from paperless_mail.models import MailRule
-from rest_framework import serializers
 
 
 class ObfuscatedPasswordField(serializers.Field):
@@ -24,7 +25,6 @@ class MailAccountSerializer(OwnedObjectSerializer):
 
     class Meta:
         model = MailAccount
-        depth = 1
         fields = [
             "id",
             "name",
@@ -34,12 +34,19 @@ class MailAccountSerializer(OwnedObjectSerializer):
             "username",
             "password",
             "character_set",
+            "is_token",
+            "owner",
+            "user_can_change",
+            "permissions",
+            "set_permissions",
         ]
 
     def update(self, instance, validated_data):
-        if "password" in validated_data:
-            if len(validated_data.get("password").replace("*", "")) == 0:
-                validated_data.pop("password")
+        if (
+            "password" in validated_data
+            and len(validated_data.get("password").replace("*", "")) == 0
+        ):
+            validated_data.pop("password")
         super().update(instance, validated_data)
         return instance
 
@@ -63,16 +70,17 @@ class MailRuleSerializer(OwnedObjectSerializer):
 
     class Meta:
         model = MailRule
-        depth = 1
         fields = [
             "id",
             "name",
             "account",
             "folder",
             "filter_from",
+            "filter_to",
             "filter_subject",
             "filter_body",
-            "filter_attachment_filename",
+            "filter_attachment_filename_include",
+            "filter_attachment_filename_exclude",
             "maximum_age",
             "action",
             "action_parameter",
@@ -81,9 +89,14 @@ class MailRuleSerializer(OwnedObjectSerializer):
             "assign_correspondent_from",
             "assign_correspondent",
             "assign_document_type",
+            "assign_owner_from_rule",
             "order",
             "attachment_type",
             "consumption_scope",
+            "owner",
+            "user_can_change",
+            "permissions",
+            "set_permissions",
         ]
 
     def update(self, instance, validated_data):

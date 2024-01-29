@@ -5,11 +5,12 @@ import multiprocessing
 import os
 import re
 import tempfile
-from typing import Dict
+from os import PathLike
+from pathlib import Path
+from platform import machine
 from typing import Final
 from typing import Optional
-from typing import Set
-from typing import Tuple
+from typing import Union
 from urllib.parse import urlparse
 
 from celery.schedules import crontab
@@ -56,6 +57,15 @@ def __get_int(key: str, default: int) -> int:
     return int(os.getenv(key, default))
 
 
+def __get_optional_int(key: str) -> Optional[int]:
+    """
+    Returns None if the environment key is not present, otherwise an integer
+    """
+    if key in os.environ:
+        return __get_int(key, -1)  # pragma: no cover
+    return None
+
+
 def __get_float(key: str, default: float) -> float:
     """
     Return an integer value based on the environment variable or a default
@@ -63,14 +73,46 @@ def __get_float(key: str, default: float) -> float:
     return float(os.getenv(key, default))
 
 
-def __get_path(key: str, default: str) -> str:
+def __get_path(
+    key: str,
+    default: Union[PathLike, str],
+) -> Path:
     """
-    Return a normalized, absolute path based on the environment variable or a default
+    Return a normalized, absolute path based on the environment variable or a default,
+    if provided
     """
-    return os.path.abspath(os.path.normpath(os.environ.get(key, default)))
+    if key in os.environ:
+        return Path(os.environ[key]).resolve()
+    return Path(default).resolve()
 
 
-def _parse_redis_url(env_redis: Optional[str]) -> Tuple[str]:
+def __get_optional_path(key: str) -> Optional[Path]:
+    """
+    Returns None if the environment key is not present, otherwise a fully resolved Path
+    """
+    if key in os.environ:
+        return __get_path(key, "")
+    return None
+
+
+def __get_list(
+    key: str,
+    default: Optional[list[str]] = None,
+    sep: str = ",",
+) -> list[str]:
+    """
+    Return a list of elements from the environment, as separated by the given
+    string, or the default if the key does not exist
+    """
+    if key in os.environ:
+        return list(filter(None, os.environ[key].split(sep)))
+    elif default is not None:
+        return default
+    else:
+        return []
+
+
+def _parse_redis_url(env_redis: Optional[str]) -> tuple[str]:
     """
     Gets the Redis information from the environment or a default and handles
     converting from incompatible django_channels and celery formats.
@@ -108,7 +150,7 @@ def _parse_redis_url(env_redis: Optional[str]) -> Tuple[str]:
     return (env_redis, env_redis)
 
 
-def _parse_beat_schedule() -> Dict:
+def _parse_beat_schedule() -> dict:
     """
     Configures the scheduled tasks, according to default or
     environment variables.  Task expiration is configured so the task will
@@ -201,16 +243,16 @@ DEBUG = __get_boolean("PAPERLESS_DEBUG", "NO")
 # Directories                                                                 #
 ###############################################################################
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR: Path = Path(__file__).resolve().parent.parent
 
-STATIC_ROOT = __get_path("PAPERLESS_STATICDIR", os.path.join(BASE_DIR, "..", "static"))
+STATIC_ROOT = __get_path("PAPERLESS_STATICDIR", BASE_DIR.parent / "static")
 
-MEDIA_ROOT = __get_path("PAPERLESS_MEDIA_ROOT", os.path.join(BASE_DIR, "..", "media"))
-ORIGINALS_DIR = os.path.join(MEDIA_ROOT, "documents", "originals")
-ARCHIVE_DIR = os.path.join(MEDIA_ROOT, "documents", "archive")
-THUMBNAIL_DIR = os.path.join(MEDIA_ROOT, "documents", "thumbnails")
+MEDIA_ROOT = __get_path("PAPERLESS_MEDIA_ROOT", BASE_DIR.parent / "media")
+ORIGINALS_DIR = MEDIA_ROOT / "documents" / "originals"
+ARCHIVE_DIR = MEDIA_ROOT / "documents" / "archive"
+THUMBNAIL_DIR = MEDIA_ROOT / "documents" / "thumbnails"
 
-DATA_DIR = __get_path("PAPERLESS_DATA_DIR", os.path.join(BASE_DIR, "..", "data"))
+DATA_DIR = __get_path("PAPERLESS_DATA_DIR", BASE_DIR.parent / "data")
 
 NLTK_DIR = __get_path("PAPERLESS_NLTK_DIR", "/usr/share/nltk_data")
 
@@ -218,28 +260,28 @@ TRASH_DIR = os.getenv("PAPERLESS_TRASH_DIR")
 
 # Lock file for synchronizing changes to the MEDIA directory across multiple
 # threads.
-MEDIA_LOCK = os.path.join(MEDIA_ROOT, "media.lock")
-INDEX_DIR = os.path.join(DATA_DIR, "index")
-MODEL_FILE = os.path.join(DATA_DIR, "classification_model.pickle")
+MEDIA_LOCK = MEDIA_ROOT / "media.lock"
+INDEX_DIR = DATA_DIR / "index"
+MODEL_FILE = DATA_DIR / "classification_model.pickle"
 
-LOGGING_DIR = __get_path("PAPERLESS_LOGGING_DIR", os.path.join(DATA_DIR, "log"))
+LOGGING_DIR = __get_path("PAPERLESS_LOGGING_DIR", DATA_DIR / "log")
 
 CONSUMPTION_DIR = __get_path(
     "PAPERLESS_CONSUMPTION_DIR",
-    os.path.join(BASE_DIR, "..", "consume"),
+    BASE_DIR.parent / "consume",
 )
 
 # This will be created if it doesn't exist
 SCRATCH_DIR = __get_path(
     "PAPERLESS_SCRATCH_DIR",
-    os.path.join(tempfile.gettempdir(), "paperless"),
+    Path(tempfile.gettempdir()) / "paperless",
 )
 
 ###############################################################################
 # Application Definition                                                      #
 ###############################################################################
 
-env_apps = os.getenv("PAPERLESS_APPS").split(",") if os.getenv("PAPERLESS_APPS") else []
+env_apps = __get_list("PAPERLESS_APPS")
 
 INSTALLED_APPS = [
     "whitenoise.runserver_nostatic",
@@ -261,7 +303,8 @@ INSTALLED_APPS = [
     "django_filters",
     "django_celery_results",
     "guardian",
-] + env_apps
+    *env_apps,
+]
 
 if DEBUG:
     INSTALLED_APPS.append("channels")
@@ -269,14 +312,14 @@ if DEBUG:
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.BasicAuthentication",
-        "rest_framework.authentication.SessionAuthentication",
         "rest_framework.authentication.TokenAuthentication",
+        "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_VERSIONING_CLASS": "rest_framework.versioning.AcceptHeaderVersioning",
     "DEFAULT_VERSION": "1",
     # Make sure these are ordered and that the most recent version appears
     # last
-    "ALLOWED_VERSIONS": ["1", "2"],
+    "ALLOWED_VERSIONS": ["1", "2", "3", "4"],
 }
 
 if DEBUG:
@@ -299,7 +342,7 @@ MIDDLEWARE = [
 ]
 
 # Optional to enable compression
-if __get_boolean("PAPERLESS_ENABLE_COMPRESSION", "yes"):  # pragma: nocover
+if __get_boolean("PAPERLESS_ENABLE_COMPRESSION", "yes"):  # pragma: no cover
     MIDDLEWARE.insert(0, "compression_middleware.middleware.CompressionMiddleware")
 
 ROOT_URLCONF = "paperless.urls"
@@ -314,6 +357,18 @@ ASGI_APPLICATION = "paperless.asgi.application"
 
 STATIC_URL = os.getenv("PAPERLESS_STATIC_URL", BASE_URL + "static/")
 WHITENOISE_STATIC_PREFIX = "/static/"
+
+if machine().lower() == "aarch64":  # pragma: no cover
+    _static_backend = "django.contrib.staticfiles.storage.StaticFilesStorage"
+else:
+    _static_backend = "whitenoise.storage.CompressedStaticFilesStorage"
+
+STORAGES = {
+    "staticfiles": {
+        "BACKEND": _static_backend,
+    },
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+}
 
 _CELERY_REDIS_URL, _CHANNELS_REDIS_URL = _parse_redis_url(
     os.getenv("PAPERLESS_REDIS", None),
@@ -330,6 +385,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "documents.context_processors.settings",
             ],
         },
     },
@@ -337,11 +393,12 @@ TEMPLATES = [
 
 CHANNEL_LAYERS = {
     "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "BACKEND": "channels_redis.pubsub.RedisPubSubChannelLayer",
         "CONFIG": {
             "hosts": [_CHANNELS_REDIS_URL],
             "capacity": 2000,  # default 100
             "expiry": 15,  # default 60
+            "prefix": os.getenv("PAPERLESS_REDIS_PREFIX", ""),
         },
     },
 }
@@ -377,51 +434,46 @@ if ENABLE_HTTP_REMOTE_USER:
     )
 
 # X-Frame options for embedded PDF display:
-if DEBUG:
-    X_FRAME_OPTIONS = "ANY"
-else:
-    X_FRAME_OPTIONS = "SAMEORIGIN"
+X_FRAME_OPTIONS = "ANY" if DEBUG else "SAMEORIGIN"
 
 
 # The next 3 settings can also be set using just PAPERLESS_URL
-_csrf_origins = os.getenv("PAPERLESS_CSRF_TRUSTED_ORIGINS")
-if _csrf_origins:
-    CSRF_TRUSTED_ORIGINS = _csrf_origins.split(",")
-else:
-    CSRF_TRUSTED_ORIGINS = []
+CSRF_TRUSTED_ORIGINS = __get_list("PAPERLESS_CSRF_TRUSTED_ORIGINS")
 
 # We allow CORS from localhost:8000
-CORS_ALLOWED_ORIGINS = tuple(
-    os.getenv("PAPERLESS_CORS_ALLOWED_HOSTS", "http://localhost:8000").split(","),
+CORS_ALLOWED_ORIGINS = __get_list(
+    "PAPERLESS_CORS_ALLOWED_HOSTS",
+    ["http://localhost:8000"],
 )
 
 if DEBUG:
     # Allow access from the angular development server during debugging
-    CORS_ALLOWED_ORIGINS += ("http://localhost:4200",)
+    CORS_ALLOWED_ORIGINS.append("http://localhost:4200")
 
-_allowed_hosts = os.getenv("PAPERLESS_ALLOWED_HOSTS")
-if _allowed_hosts:
-    ALLOWED_HOSTS = _allowed_hosts.split(",")
-else:
-    ALLOWED_HOSTS = ["*"]
+ALLOWED_HOSTS = __get_list("PAPERLESS_ALLOWED_HOSTS", ["*"])
 
 _paperless_url = os.getenv("PAPERLESS_URL")
 if _paperless_url:
     _paperless_uri = urlparse(_paperless_url)
     CSRF_TRUSTED_ORIGINS.append(_paperless_url)
-    CORS_ALLOWED_ORIGINS += (_paperless_url,)
-    if _allowed_hosts:
+    CORS_ALLOWED_ORIGINS.append(_paperless_url)
+
+if ["*"] != ALLOWED_HOSTS:
+    # always allow localhost. Necessary e.g. for healthcheck in docker.
+    ALLOWED_HOSTS.append("localhost")
+    if _paperless_url:
         ALLOWED_HOSTS.append(_paperless_uri.hostname)
-    else:
-        # always allow localhost. Necessary e.g. for healthcheck in docker.
-        ALLOWED_HOSTS = [_paperless_uri.hostname] + ["localhost"]
 
 # For use with trusted proxies
-_trusted_proxies = os.getenv("PAPERLESS_TRUSTED_PROXIES")
-if _trusted_proxies:
-    TRUSTED_PROXIES = _trusted_proxies.split(",")
-else:
-    TRUSTED_PROXIES = []
+TRUSTED_PROXIES = __get_list("PAPERLESS_TRUSTED_PROXIES")
+
+USE_X_FORWARDED_HOST = __get_boolean("PAPERLESS_USE_X_FORWARD_HOST", "false")
+USE_X_FORWARDED_PORT = __get_boolean("PAPERLESS_USE_X_FORWARD_PORT", "false")
+SECURE_PROXY_SSL_HEADER = (
+    tuple(json.loads(os.environ["PAPERLESS_PROXY_SSL_HEADER"]))
+    if "PAPERLESS_PROXY_SSL_HEADER" in os.environ
+    else None
+)
 
 # The secret key has a default that should be fine so long as you're hosting
 # Paperless on a closed network.  However, if you're putting this anywhere
@@ -433,7 +485,7 @@ SECRET_KEY = os.getenv(
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",  # noqa: E501
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
     },
     {
         "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
@@ -448,8 +500,8 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # Disable Django's artificial limit on the number of form fields to submit at
 # once. This is a protection against overloading the server, but since this is
-# a self-hosted sort of gig, the benefits of being able to mass-delete a tonne
-# of log entries outweight the benefits of such a safeguard.
+# a self-hosted sort of gig, the benefits of being able to mass-delete a ton
+# of log entries outweigh the benefits of such a safeguard.
 
 DATA_UPLOAD_MAX_NUMBER_FIELDS = None
 
@@ -459,55 +511,84 @@ CSRF_COOKIE_NAME = f"{COOKIE_PREFIX}csrftoken"
 SESSION_COOKIE_NAME = f"{COOKIE_PREFIX}sessionid"
 LANGUAGE_COOKIE_NAME = f"{COOKIE_PREFIX}django_language"
 
+EMAIL_CERTIFICATE_FILE = __get_optional_path("PAPERLESS_EMAIL_CERTIFICATE_LOCATION")
+
+
 ###############################################################################
 # Database                                                                    #
 ###############################################################################
-
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": os.path.join(DATA_DIR, "db.sqlite3"),
-        "OPTIONS": {},
-    },
-}
-
-if os.getenv("PAPERLESS_DBHOST"):
-    # Have sqlite available as a second option for management commands
-    # This is important when migrating to/from sqlite
-    DATABASES["sqlite"] = DATABASES["default"].copy()
-
-    DATABASES["default"] = {
-        "HOST": os.getenv("PAPERLESS_DBHOST"),
-        "NAME": os.getenv("PAPERLESS_DBNAME", "paperless"),
-        "USER": os.getenv("PAPERLESS_DBUSER", "paperless"),
-        "PASSWORD": os.getenv("PAPERLESS_DBPASS", "paperless"),
-        "OPTIONS": {},
+def _parse_db_settings() -> dict:
+    databases = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": os.path.join(DATA_DIR, "db.sqlite3"),
+            "OPTIONS": {},
+        },
     }
-    if os.getenv("PAPERLESS_DBPORT"):
-        DATABASES["default"]["PORT"] = os.getenv("PAPERLESS_DBPORT")
+    if os.getenv("PAPERLESS_DBHOST"):
+        # Have sqlite available as a second option for management commands
+        # This is important when migrating to/from sqlite
+        databases["sqlite"] = databases["default"].copy()
 
-    # Leave room for future extensibility
-    if os.getenv("PAPERLESS_DBENGINE") == "mariadb":
-        engine = "django.db.backends.mysql"
-        options = {"read_default_file": "/etc/mysql/my.cnf", "charset": "utf8mb4"}
+        databases["default"] = {
+            "HOST": os.getenv("PAPERLESS_DBHOST"),
+            "NAME": os.getenv("PAPERLESS_DBNAME", "paperless"),
+            "USER": os.getenv("PAPERLESS_DBUSER", "paperless"),
+            "PASSWORD": os.getenv("PAPERLESS_DBPASS", "paperless"),
+            "OPTIONS": {},
+        }
+        if os.getenv("PAPERLESS_DBPORT"):
+            databases["default"]["PORT"] = os.getenv("PAPERLESS_DBPORT")
 
-        # Silence Django error on old MariaDB versions.
-        # VARCHAR can support > 255 in modern versions
-        # https://docs.djangoproject.com/en/4.1/ref/checks/#database
-        # https://mariadb.com/kb/en/innodb-system-variables/#innodb_large_prefix
-        SILENCED_SYSTEM_CHECKS = ["mysql.W003"]
+        # Leave room for future extensibility
+        if os.getenv("PAPERLESS_DBENGINE") == "mariadb":
+            engine = "django.db.backends.mysql"
+            options = {
+                "read_default_file": "/etc/mysql/my.cnf",
+                "charset": "utf8mb4",
+                "ssl": {
+                    "ssl_mode": os.getenv("PAPERLESS_DBSSLMODE", "PREFERRED"),
+                    "ca": os.getenv("PAPERLESS_DBSSLROOTCERT", None),
+                    "cert": os.getenv("PAPERLESS_DBSSLCERT", None),
+                    "key": os.getenv("PAPERLESS_DBSSLKEY", None),
+                },
+            }
 
-    else:  # Default to PostgresDB
-        engine = "django.db.backends.postgresql_psycopg2"
-        options = {"sslmode": os.getenv("PAPERLESS_DBSSLMODE", "prefer")}
+        else:  # Default to PostgresDB
+            engine = "django.db.backends.postgresql_psycopg2"
+            options = {
+                "sslmode": os.getenv("PAPERLESS_DBSSLMODE", "prefer"),
+                "sslrootcert": os.getenv("PAPERLESS_DBSSLROOTCERT", None),
+                "sslcert": os.getenv("PAPERLESS_DBSSLCERT", None),
+                "sslkey": os.getenv("PAPERLESS_DBSSLKEY", None),
+            }
 
-    DATABASES["default"]["ENGINE"] = engine
-    DATABASES["default"]["OPTIONS"].update(options)
+        databases["default"]["ENGINE"] = engine
+        databases["default"]["OPTIONS"].update(options)
 
-if os.getenv("PAPERLESS_DB_TIMEOUT") is not None:
-    DATABASES["default"]["OPTIONS"].update(
-        {"timeout": float(os.getenv("PAPERLESS_DB_TIMEOUT"))},
-    )
+    if os.getenv("PAPERLESS_DB_TIMEOUT") is not None:
+        if databases["default"]["ENGINE"] == "django.db.backends.sqlite3":
+            databases["default"]["OPTIONS"].update(
+                {"timeout": int(os.getenv("PAPERLESS_DB_TIMEOUT"))},
+            )
+        else:
+            databases["default"]["OPTIONS"].update(
+                {"connect_timeout": int(os.getenv("PAPERLESS_DB_TIMEOUT"))},
+            )
+            databases["sqlite"]["OPTIONS"].update(
+                {"timeout": int(os.getenv("PAPERLESS_DB_TIMEOUT"))},
+            )
+    return databases
+
+
+DATABASES = _parse_db_settings()
+
+if os.getenv("PAPERLESS_DBENGINE") == "mariadb":
+    # Silence Django error on old MariaDB versions.
+    # VARCHAR can support > 255 in modern versions
+    # https://docs.djangoproject.com/en/4.1/ref/checks/#database
+    # https://mariadb.com/kb/en/innodb-system-variables/#innodb_large_prefix
+    SILENCED_SYSTEM_CHECKS = ["mysql.W003"]
 
 DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 
@@ -520,25 +601,34 @@ LANGUAGE_CODE = "en-us"
 LANGUAGES = [
     ("en-us", _("English (US)")),  # needs to be first to act as fallback language
     ("ar-ar", _("Arabic")),
+    ("af-za", _("Afrikaans")),
     ("be-by", _("Belarusian")),
+    ("bg-bg", _("Bulgarian")),
+    ("ca-es", _("Catalan")),
     ("cs-cz", _("Czech")),
     ("da-dk", _("Danish")),
     ("de-de", _("German")),
+    ("el-gr", _("Greek")),
     ("en-gb", _("English (GB)")),
     ("es-es", _("Spanish")),
+    ("fi-fi", _("Finnish")),
     ("fr-fr", _("French")),
+    ("hu-hu", _("Hungarian")),
     ("it-it", _("Italian")),
     ("lb-lu", _("Luxembourgish")),
+    ("no-no", _("Norwegian")),
     ("nl-nl", _("Dutch")),
     ("pl-pl", _("Polish")),
     ("pt-br", _("Portuguese (Brazil)")),
     ("pt-pt", _("Portuguese")),
     ("ro-ro", _("Romanian")),
     ("ru-ru", _("Russian")),
+    ("sk-sk", _("Slovak")),
     ("sl-si", _("Slovenian")),
     ("sr-cs", _("Serbian")),
     ("sv-se", _("Swedish")),
     ("tr-tr", _("Turkish")),
+    ("uk-ua", _("Ukrainian")),
     ("zh-cn", _("Chinese Simplified")),
 ]
 
@@ -596,11 +686,20 @@ LOGGING = {
             "maxBytes": LOGROTATE_MAX_SIZE,
             "backupCount": LOGROTATE_MAX_BACKUPS,
         },
+        "file_celery": {
+            "class": "concurrent_log_handler.ConcurrentRotatingFileHandler",
+            "formatter": "verbose",
+            "filename": os.path.join(LOGGING_DIR, "celery.log"),
+            "maxBytes": LOGROTATE_MAX_SIZE,
+            "backupCount": LOGROTATE_MAX_BACKUPS,
+        },
     },
     "root": {"handlers": ["console"]},
     "loggers": {
         "paperless": {"handlers": ["file_paperless"], "level": "DEBUG"},
         "paperless_mail": {"handlers": ["file_mail"], "level": "DEBUG"},
+        "celery": {"handlers": ["file_celery"], "level": "DEBUG"},
+        "kombu": {"handlers": ["file_celery"], "level": "DEBUG"},
     },
 }
 
@@ -620,6 +719,11 @@ CELERY_WORKER_MAX_TASKS_PER_CHILD = 1
 CELERY_WORKER_SEND_TASK_EVENTS = True
 CELERY_TASK_SEND_SENT_EVENT = True
 CELERY_SEND_TASK_SENT_EVENT = True
+CELERY_BROKER_CONNECTION_RETRY = True
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+CELERY_BROKER_TRANSPORT_OPTIONS = {
+    "global_keyprefix": os.getenv("PAPERLESS_REDIS_PREFIX", ""),
+}
 
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT: Final[int] = __get_int("PAPERLESS_WORKER_TIMEOUT", 1800)
@@ -627,6 +731,11 @@ CELERY_TASK_TIME_LIMIT: Final[int] = __get_int("PAPERLESS_WORKER_TIMEOUT", 1800)
 CELERY_RESULT_EXTENDED = True
 CELERY_RESULT_BACKEND = "django-db"
 CELERY_CACHE_BACKEND = "default"
+
+# https://docs.celeryq.dev/en/stable/userguide/configuration.html#task-serializer
+CELERY_TASK_SERIALIZER = "pickle"
+# https://docs.celeryq.dev/en/stable/userguide/configuration.html#std-setting-accept_content
+CELERY_ACCEPT_CONTENT = ["application/json", "application/x-python-serialize"]
 
 # https://docs.celeryq.dev/en/stable/userguide/configuration.html#beat-schedule
 CELERY_BEAT_SCHEDULE = _parse_beat_schedule()
@@ -683,7 +792,7 @@ CONSUMER_IGNORE_PATTERNS = list(
     json.loads(
         os.getenv(
             "PAPERLESS_CONSUMER_IGNORE_PATTERNS",
-            '[".DS_STORE/*", "._*", ".stfolder/*", ".stversions/*", ".localized/*", "desktop.ini", "@eaDir/*"]',  # noqa: E501
+            '[".DS_Store", ".DS_STORE", "._*", ".stfolder/*", ".stversions/*", ".localized/*", "desktop.ini", "@eaDir/*"]',
         ),
     ),
 )
@@ -703,6 +812,11 @@ CONSUMER_BARCODE_STRING: Final[str] = os.getenv(
     "PATCHT",
 )
 
+CONSUMER_BARCODE_SCANNER: Final[str] = os.getenv(
+    "PAPERLESS_CONSUMER_BARCODE_SCANNER",
+    "PYZBAR",
+).upper()
+
 CONSUMER_ENABLE_ASN_BARCODE: Final[bool] = __get_boolean(
     "PAPERLESS_CONSUMER_ENABLE_ASN_BARCODE",
 )
@@ -712,8 +826,27 @@ CONSUMER_ASN_BARCODE_PREFIX: Final[str] = os.getenv(
     "ASN",
 )
 
+CONSUMER_BARCODE_UPSCALE: Final[float] = __get_float(
+    "PAPERLESS_CONSUMER_BARCODE_UPSCALE",
+    0.0,
+)
 
-OCR_PAGES = int(os.getenv("PAPERLESS_OCR_PAGES", 0))
+CONSUMER_BARCODE_DPI: Final[int] = __get_int("PAPERLESS_CONSUMER_BARCODE_DPI", 300)
+
+CONSUMER_ENABLE_COLLATE_DOUBLE_SIDED: Final[bool] = __get_boolean(
+    "PAPERLESS_CONSUMER_ENABLE_COLLATE_DOUBLE_SIDED",
+)
+
+CONSUMER_COLLATE_DOUBLE_SIDED_SUBDIR_NAME: Final[str] = os.getenv(
+    "PAPERLESS_CONSUMER_COLLATE_DOUBLE_SIDED_SUBDIR_NAME",
+    "double-sided",
+)
+
+CONSUMER_COLLATE_DOUBLE_SIDED_TIFF_SUPPORT: Final[bool] = __get_boolean(
+    "PAPERLESS_CONSUMER_COLLATE_DOUBLE_SIDED_TIFF_SUPPORT",
+)
+
+OCR_PAGES = __get_optional_int("PAPERLESS_OCR_PAGES")
 
 # The default language that tesseract will attempt to use when parsing
 # documents.  It should be a 3-letter language code consistent with ISO 639.
@@ -727,23 +860,29 @@ OCR_MODE = os.getenv("PAPERLESS_OCR_MODE", "skip")
 
 OCR_SKIP_ARCHIVE_FILE = os.getenv("PAPERLESS_OCR_SKIP_ARCHIVE_FILE", "never")
 
-OCR_IMAGE_DPI = os.getenv("PAPERLESS_OCR_IMAGE_DPI")
+OCR_IMAGE_DPI = __get_optional_int("PAPERLESS_OCR_IMAGE_DPI")
 
 OCR_CLEAN = os.getenv("PAPERLESS_OCR_CLEAN", "clean")
 
-OCR_DESKEW = __get_boolean("PAPERLESS_OCR_DESKEW", "true")
+OCR_DESKEW: Final[bool] = __get_boolean("PAPERLESS_OCR_DESKEW", "true")
 
-OCR_ROTATE_PAGES = __get_boolean("PAPERLESS_OCR_ROTATE_PAGES", "true")
+OCR_ROTATE_PAGES: Final[bool] = __get_boolean("PAPERLESS_OCR_ROTATE_PAGES", "true")
 
-OCR_ROTATE_PAGES_THRESHOLD = float(
-    os.getenv("PAPERLESS_OCR_ROTATE_PAGES_THRESHOLD", 12.0),
+OCR_ROTATE_PAGES_THRESHOLD: Final[float] = __get_float(
+    "PAPERLESS_OCR_ROTATE_PAGES_THRESHOLD",
+    12.0,
 )
 
-OCR_MAX_IMAGE_PIXELS: Optional[int] = None
-if os.environ.get("PAPERLESS_OCR_MAX_IMAGE_PIXELS") is not None:
-    OCR_MAX_IMAGE_PIXELS: int = int(os.environ.get("PAPERLESS_OCR_MAX_IMAGE_PIXELS"))
+OCR_MAX_IMAGE_PIXELS: Final[Optional[int]] = __get_optional_int(
+    "PAPERLESS_OCR_MAX_IMAGE_PIXELS",
+)
 
-OCR_USER_ARGS = os.getenv("PAPERLESS_OCR_USER_ARGS", "{}")
+OCR_COLOR_CONVERSION_STRATEGY = os.getenv(
+    "PAPERLESS_OCR_COLOR_CONVERSION_STRATEGY",
+    "RGB",
+)
+
+OCR_USER_ARGS = os.getenv("PAPERLESS_OCR_USER_ARGS")
 
 # GNUPG needs a home directory for some reason
 GNUPG_HOME = os.getenv("HOME", "/tmp")
@@ -814,11 +953,16 @@ TIKA_GOTENBERG_ENDPOINT = os.getenv(
 if TIKA_ENABLED:
     INSTALLED_APPS.append("paperless_tika.apps.PaperlessTikaConfig")
 
+AUDIT_LOG_ENABLED = __get_boolean("PAPERLESS_AUDIT_LOG_ENABLED", "NO")
+if AUDIT_LOG_ENABLED:
+    INSTALLED_APPS.append("auditlog")
+    MIDDLEWARE.append("auditlog.middleware.AuditlogMiddleware")
+
 
 def _parse_ignore_dates(
     env_ignore: str,
     date_order: str = DATE_ORDER,
-) -> Set[datetime.datetime]:
+) -> set[datetime.datetime]:
     """
     If the PAPERLESS_IGNORE_DATES environment variable is set, parse the
     user provided string(s) into dates
@@ -847,7 +991,7 @@ def _parse_ignore_dates(
 
 
 # List dates that should be ignored when trying to parse date from document text
-IGNORE_DATES: Set[datetime.date] = set()
+IGNORE_DATES: set[datetime.date] = set()
 
 if os.getenv("PAPERLESS_IGNORE_DATES") is not None:
     IGNORE_DATES = _parse_ignore_dates(os.getenv("PAPERLESS_IGNORE_DATES"))
@@ -855,6 +999,9 @@ if os.getenv("PAPERLESS_IGNORE_DATES") is not None:
 ENABLE_UPDATE_CHECK = os.getenv("PAPERLESS_ENABLE_UPDATE_CHECK", "default")
 if ENABLE_UPDATE_CHECK != "default":
     ENABLE_UPDATE_CHECK = __get_boolean("PAPERLESS_ENABLE_UPDATE_CHECK")
+
+APP_TITLE = os.getenv("PAPERLESS_APP_TITLE", None)
+APP_LOGO = os.getenv("PAPERLESS_APP_LOGO", None)
 
 ###############################################################################
 # Machine Learning                                                            #
@@ -868,6 +1015,10 @@ def _get_nltk_language_setting(ocr_lang: str) -> Optional[str]:
     languages for all the NLTK data used.
 
     Assumption: The primary language is first
+
+    NLTK Languages:
+      - https://www.nltk.org/api/nltk.stem.snowball.html#nltk.stem.snowball.SnowballStemmer
+
     """
     ocr_lang = ocr_lang.split("+")[0]
     iso_code_to_nltk = {
@@ -892,3 +1043,16 @@ def _get_nltk_language_setting(ocr_lang: str) -> Optional[str]:
 NLTK_ENABLED: Final[bool] = __get_boolean("PAPERLESS_ENABLE_NLTK", "yes")
 
 NLTK_LANGUAGE: Optional[str] = _get_nltk_language_setting(OCR_LANGUAGE)
+
+###############################################################################
+# Email (SMTP) Backend                                                        #
+###############################################################################
+
+EMAIL_HOST: Final[str] = os.getenv("PAPERLESS_EMAIL_HOST", "localhost")
+EMAIL_PORT: Final[int] = int(os.getenv("PAPERLESS_EMAIL_PORT", 25))
+EMAIL_HOST_USER: Final[str] = os.getenv("PAPERLESS_EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD: Final[str] = os.getenv("PAPERLESS_EMAIL_HOST_PASSWORD", "")
+DEFAULT_FROM_EMAIL: Final[str] = os.getenv("PAPERLESS_EMAIL_FROM", EMAIL_HOST_USER)
+EMAIL_USE_TLS: Final[bool] = __get_boolean("PAPERLESS_EMAIL_USE_TLS")
+EMAIL_USE_SSL: Final[bool] = __get_boolean("PAPERLESS_EMAIL_USE_SSL")
+EMAIL_SUBJECT_PREFIX: Final[str] = "[Paperless-ngx] "

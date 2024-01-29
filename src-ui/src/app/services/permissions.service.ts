@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core'
 import { ObjectWithPermissions } from '../data/object-with-permissions'
-import { PaperlessUser } from '../data/paperless-user'
+import { User } from '../data/user'
 
 export enum PermissionAction {
   Add = 'add',
@@ -17,13 +17,17 @@ export enum PermissionType {
   StoragePath = '%s_storagepath',
   SavedView = '%s_savedview',
   PaperlessTask = '%s_paperlesstask',
+  AppConfig = '%s_applicationconfiguration',
   UISettings = '%s_uisettings',
-  Comment = '%s_comment',
+  Note = '%s_note',
   MailAccount = '%s_mailaccount',
   MailRule = '%s_mailrule',
   User = '%s_user',
   Group = '%s_group',
   Admin = '%s_logentry',
+  ShareLink = '%s_sharelink',
+  CustomField = '%s_customfield',
+  Workflow = '%s_workflow',
 }
 
 @Injectable({
@@ -31,9 +35,9 @@ export enum PermissionType {
 })
 export class PermissionsService {
   private permissions: string[]
-  private currentUser: PaperlessUser
+  private currentUser: User
 
-  public initialize(permissions: string[], currentUser: PaperlessUser) {
+  public initialize(permissions: string[], currentUser: User) {
     this.permissions = permissions
     this.currentUser = currentUser
   }
@@ -42,23 +46,43 @@ export class PermissionsService {
     action: PermissionAction,
     type: PermissionType
   ): boolean {
-    return this.permissions.includes(this.getPermissionCode(action, type))
+    return (
+      this.currentUser?.is_superuser ||
+      this.permissions?.includes(this.getPermissionCode(action, type))
+    )
   }
 
   public currentUserOwnsObject(object: ObjectWithPermissions): boolean {
-    return !object || !object.owner || object.owner === this.currentUser.id
+    return (
+      !object ||
+      !object.owner ||
+      this.currentUser.is_superuser ||
+      object.owner === this.currentUser.id
+    )
   }
 
   public currentUserHasObjectPermissions(
     action: string,
     object: ObjectWithPermissions
   ): boolean {
-    return (
-      this.currentUserOwnsObject(object) ||
-      (object.permissions[action]['users'] as Array<number>)?.includes(
-        this.currentUser.id
+    if (action === PermissionAction.View) {
+      return (
+        this.currentUserOwnsObject(object) ||
+        object.permissions?.view.users.includes(this.currentUser.id) ||
+        object.permissions?.view.groups.filter((g) =>
+          this.currentUser.groups.includes(g)
+        ).length > 0
       )
-    )
+    } else if (action === PermissionAction.Change) {
+      return (
+        this.currentUserOwnsObject(object) ||
+        object.user_can_change ||
+        object.permissions?.change.users.includes(this.currentUser.id) ||
+        object.permissions?.change.groups.filter((g) =>
+          this.currentUser.groups.includes(g)
+        ).length > 0
+      )
+    }
   }
 
   public getPermissionCode(

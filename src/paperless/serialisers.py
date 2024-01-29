@@ -1,7 +1,13 @@
+import logging
+
 from django.contrib.auth.models import Group
 from django.contrib.auth.models import Permission
 from django.contrib.auth.models import User
 from rest_framework import serializers
+
+from paperless.models import ApplicationConfiguration
+
+logger = logging.getLogger("paperless.settings")
 
 
 class ObfuscatedUserPasswordField(serializers.Field):
@@ -17,12 +23,12 @@ class ObfuscatedUserPasswordField(serializers.Field):
 
 
 class UserSerializer(serializers.ModelSerializer):
-
     password = ObfuscatedUserPasswordField(required=False)
     user_permissions = serializers.SlugRelatedField(
         many=True,
         queryset=Permission.objects.all(),
         slug_field="codename",
+        required=False,
     )
     inherited_permissions = serializers.SerializerMethodField()
 
@@ -64,9 +70,11 @@ class UserSerializer(serializers.ModelSerializer):
         if "user_permissions" in validated_data:
             user_permissions = validated_data.pop("user_permissions")
         password = None
-        if "password" in validated_data:
-            if len(validated_data.get("password").replace("*", "")) > 0:
-                password = validated_data.pop("password")
+        if (
+            "password" in validated_data
+            and len(validated_data.get("password").replace("*", "")) > 0
+        ):
+            password = validated_data.pop("password")
         user = User.objects.create(**validated_data)
         # set groups
         if groups:
@@ -82,7 +90,6 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class GroupSerializer(serializers.ModelSerializer):
-
     permissions = serializers.SlugRelatedField(
         many=True,
         queryset=Permission.objects.all(),
@@ -96,3 +103,40 @@ class GroupSerializer(serializers.ModelSerializer):
             "name",
             "permissions",
         )
+
+
+class ProfileSerializer(serializers.ModelSerializer):
+    email = serializers.EmailField(allow_null=False)
+    password = ObfuscatedUserPasswordField(required=False, allow_null=False)
+    auth_token = serializers.SlugRelatedField(read_only=True, slug_field="key")
+
+    class Meta:
+        model = User
+        fields = (
+            "email",
+            "password",
+            "first_name",
+            "last_name",
+            "auth_token",
+        )
+
+
+class ApplicationConfigurationSerializer(serializers.ModelSerializer):
+    user_args = serializers.JSONField(binary=True, allow_null=True)
+
+    def run_validation(self, data):
+        # Empty strings treated as None to avoid unexpected behavior
+        if "user_args" in data and data["user_args"] == "":
+            data["user_args"] = None
+        if "language" in data and data["language"] == "":
+            data["language"] = None
+        return super().run_validation(data)
+
+    def update(self, instance, validated_data):
+        if instance.app_logo and "app_logo" in validated_data:
+            instance.app_logo.delete()
+        return super().update(instance, validated_data)
+
+    class Meta:
+        model = ApplicationConfiguration
+        fields = "__all__"

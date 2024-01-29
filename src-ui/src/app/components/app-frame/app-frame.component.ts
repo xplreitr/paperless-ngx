@@ -8,8 +8,9 @@ import {
   map,
   switchMap,
   first,
+  catchError,
 } from 'rxjs/operators'
-import { PaperlessDocument } from 'src/app/data/paperless-document'
+import { Document } from 'src/app/data/document'
 import { OpenDocumentsService } from 'src/app/services/open-documents.service'
 import { SavedViewService } from 'src/app/services/rest/saved-view.service'
 import { SearchService } from 'src/app/services/rest/search.service'
@@ -24,13 +25,27 @@ import {
 import { SettingsService } from 'src/app/services/settings.service'
 import { TasksService } from 'src/app/services/tasks.service'
 import { ComponentCanDeactivate } from 'src/app/guards/dirty-doc.guard'
-import { SETTINGS_KEYS } from 'src/app/data/paperless-uisettings'
+import { SETTINGS_KEYS } from 'src/app/data/ui-settings'
 import { ToastService } from 'src/app/services/toast.service'
 import { ComponentWithPermissions } from '../with-permissions/with-permissions.component'
 import { SplitMergeService } from 'src/app/services/split-merge.service'
+import {
+  PermissionAction,
+  PermissionsService,
+  PermissionType,
+} from 'src/app/services/permissions.service'
+import { SavedView } from 'src/app/data/saved-view'
+import {
+  CdkDragStart,
+  CdkDragEnd,
+  CdkDragDrop,
+  moveItemInArray,
+} from '@angular/cdk/drag-drop'
+import { NgbModal } from '@ng-bootstrap/ng-bootstrap'
+import { ProfileEditDialogComponent } from '../common/profile-edit-dialog/profile-edit-dialog.component'
 
 @Component({
-  selector: 'app-app-frame',
+  selector: 'pngx-app-frame',
   templateUrl: './app-frame.component.html',
   styleUrls: ['./app-frame.component.scss'],
 })
@@ -38,6 +53,15 @@ export class AppFrameComponent
   extends ComponentWithPermissions
   implements OnInit, ComponentCanDeactivate
 {
+  versionString = `${environment.appTitle} ${environment.version}`
+  appRemoteVersion: AppRemoteVersion
+
+  isMenuCollapsed: boolean = true
+
+  slimSidebarAnimating: boolean = false
+
+  searchField = new FormControl('')
+
   constructor(
     public router: Router,
     private activatedRoute: ActivatedRoute,
@@ -49,9 +73,20 @@ export class AppFrameComponent
     public settingsService: SettingsService,
     public tasksService: TasksService,
     private readonly toastService: ToastService,
+    private modalService: NgbModal,
+    permissionsService: PermissionsService,
     private splitMergeService: SplitMergeService
   ) {
     super()
+
+    if (
+      permissionsService.currentUserCan(
+        PermissionAction.View,
+        PermissionType.SavedView
+      )
+    ) {
+      this.savedViewService.initialize()
+    }
   }
 
   ngOnInit(): void {
@@ -61,19 +96,16 @@ export class AppFrameComponent
     this.tasksService.reload()
   }
 
-  versionString = `${environment.appTitle} ${environment.version}`
-  appRemoteVersion
-
-  isMenuCollapsed: boolean = true
-
-  slimSidebarAnimating: boolean = false
-
   toggleSlimSidebar(): void {
     this.slimSidebarAnimating = true
     this.slimSidebarEnabled = !this.slimSidebarEnabled
     setTimeout(() => {
       this.slimSidebarAnimating = false
     }, 200) // slightly longer than css animation for slim sidebar
+  }
+
+  get customAppTitle(): string {
+    return this.settingsService.get(SETTINGS_KEYS.APP_TITLE)
   }
 
   get slimSidebarEnabled(): boolean {
@@ -90,7 +122,7 @@ export class AppFrameComponent
           this.toastService.showError(
             $localize`An error occurred while saving settings.`
           )
-          console.log(error)
+          console.warn(error)
         },
       })
   }
@@ -99,7 +131,14 @@ export class AppFrameComponent
     this.isMenuCollapsed = true
   }
 
-  get openDocuments(): PaperlessDocument[] {
+  editProfile() {
+    this.modalService.open(ProfileEditDialogComponent, {
+      backdrop: 'static',
+    })
+    this.closeMenu()
+  }
+
+  get openDocuments(): Document[] {
     return this.openDocumentsService.getOpenDocuments()
   }
 
@@ -107,8 +146,6 @@ export class AppFrameComponent
   canDeactivate(): Observable<boolean> | boolean {
     return !this.openDocumentsService.hasDirty()
   }
-
-  searchField = new FormControl('')
 
   get searchFieldEmpty(): boolean {
     return this.searchField.value.trim().length == 0
@@ -136,7 +173,13 @@ export class AppFrameComponent
         }
       }),
       switchMap((term) =>
-        term.length < 2 ? from([[]]) : this.searchService.autocomplete(term)
+        term.length < 2
+          ? from([[]])
+          : this.searchService.autocomplete(term).pipe(
+              catchError(() => {
+                return from([[]])
+              })
+            )
       )
     )
 
@@ -163,7 +206,7 @@ export class AppFrameComponent
     ])
   }
 
-  closeDocument(d: PaperlessDocument) {
+  closeDocument(d: Document) {
     this.openDocumentsService
       .closeDocument(d)
       .pipe(first())
@@ -209,6 +252,28 @@ export class AppFrameComponent
     return this.splitMergeService.hasDocuments()
   }
 
+  onDragStart(event: CdkDragStart) {
+    this.settingsService.globalDropzoneEnabled = false
+  }
+
+  onDragEnd(event: CdkDragEnd) {
+    this.settingsService.globalDropzoneEnabled = true
+  }
+
+  onDrop(event: CdkDragDrop<SavedView[]>) {
+    const sidebarViews = this.savedViewService.sidebarViews.concat([])
+    moveItemInArray(sidebarViews, event.previousIndex, event.currentIndex)
+
+    this.settingsService.updateSidebarViewsSort(sidebarViews).subscribe({
+      next: () => {
+        this.toastService.showInfo($localize`Sidebar views updated`)
+      },
+      error: (e) => {
+        this.toastService.showError($localize`Error updating sidebar views`, e)
+      },
+    })
+  }
+
   private checkForUpdates() {
     this.remoteVersionService
       .checkForUpdates()
@@ -227,11 +292,15 @@ export class AppFrameComponent
           this.toastService.showError(
             $localize`An error occurred while saving update checking settings.`
           )
-          console.log(error)
+          console.warn(error)
         },
       })
     if (enable) {
       this.checkForUpdates()
     }
+  }
+
+  onLogout() {
+    this.openDocumentsService.closeAll()
   }
 }

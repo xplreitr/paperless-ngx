@@ -5,9 +5,11 @@ import shutil
 import stat
 
 from django.conf import settings
+from django.core.checks import Critical
 from django.core.checks import Error
-from django.core.checks import register
 from django.core.checks import Warning
+from django.core.checks import register
+from django.db import connections
 
 exists_message = "{} is set but doesn't exist."
 exists_hint = "Create a directory at {}"
@@ -42,7 +44,7 @@ def path_check(var, directory):
                     Error(
                         writeable_message.format(var),
                         writeable_hint.format(
-                            f"\n{dir_mode} {dir_owner} {dir_group} " f"{directory}\n",
+                            f"\n{dir_mode} {dir_owner} {dir_group} {directory}\n",
                         ),
                     ),
                 )
@@ -93,8 +95,8 @@ def debug_mode_check(app_configs, **kwargs):
         return [
             Warning(
                 "DEBUG mode is enabled. Disable Debug mode. This is a serious "
-                "security issue, since it puts security overides in place which "
-                "are meant to be only used during development. This "
+                "security issue, since it puts security overrides in place "
+                "which are meant to be only used during development. This "
                 "also means that paperless will tell anyone various "
                 "debugging information when something goes wrong.",
             ),
@@ -155,10 +157,8 @@ def settings_values_check(app_configs, **kwargs):
         """
         Validates the user provided timezone is a valid timezone
         """
-        try:
-            import zoneinfo
-        except ImportError:  # pragma: nocover
-            import backports.zoneinfo as zoneinfo
+        import zoneinfo
+
         msgs = []
         if settings.TIME_ZONE not in zoneinfo.available_timezones():
             msgs.append(
@@ -166,4 +166,53 @@ def settings_values_check(app_configs, **kwargs):
             )
         return msgs
 
-    return _ocrmypdf_settings_check() + _timezone_validate()
+    def _barcode_scanner_validate():
+        """
+        Validates the barcode scanner type
+        """
+        msgs = []
+        if settings.CONSUMER_BARCODE_SCANNER not in ["PYZBAR", "ZXING"]:
+            msgs.append(
+                Error(f'Invalid Barcode Scanner "{settings.CONSUMER_BARCODE_SCANNER}"'),
+            )
+        return msgs
+
+    def _email_certificate_validate():
+        msgs = []
+        # Existence checks
+        if (
+            settings.EMAIL_CERTIFICATE_FILE is not None
+            and not settings.EMAIL_CERTIFICATE_FILE.is_file()
+        ):
+            msgs.append(
+                Error(
+                    f"Email cert {settings.EMAIL_CERTIFICATE_FILE} is not a file",
+                ),
+            )
+        return msgs
+
+    return (
+        _ocrmypdf_settings_check()
+        + _timezone_validate()
+        + _barcode_scanner_validate()
+        + _email_certificate_validate()
+    )
+
+
+@register()
+def audit_log_check(app_configs, **kwargs):
+    db_conn = connections["default"]
+    all_tables = db_conn.introspection.table_names()
+    result = []
+
+    if ("auditlog_logentry" in all_tables) and not (settings.AUDIT_LOG_ENABLED):
+        result.append(
+            Critical(
+                (
+                    "auditlog table was found but PAPERLESS_AUDIT_LOG_ENABLED"
+                    " is not active.  This setting cannot be disabled after enabling"
+                ),
+            ),
+        )
+
+    return result

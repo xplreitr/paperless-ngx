@@ -1,19 +1,19 @@
 import shutil
 import tempfile
+from collections.abc import Iterable
 from random import randint
-from typing import Iterable
 
 from django.contrib.admin.models import LogEntry
 from django.contrib.auth.models import User
-from django.test import override_settings
 from django.test import TestCase
+from django.test import override_settings
 
-from .. import matching
-from ..models import Correspondent
-from ..models import Document
-from ..models import DocumentType
-from ..models import Tag
-from ..signals import document_consumption_finished
+from documents import matching
+from documents.models import Correspondent
+from documents.models import Document
+from documents.models import DocumentType
+from documents.models import Tag
+from documents.signals import document_consumption_finished
 
 
 class _TestMatchingBase(TestCase):
@@ -48,7 +48,6 @@ class _TestMatchingBase(TestCase):
 
 class TestMatching(_TestMatchingBase):
     def test_match_none(self):
-
         self._test_matching(
             "",
             "MATCH_NONE",
@@ -60,7 +59,6 @@ class TestMatching(_TestMatchingBase):
         )
 
     def test_match_all(self):
-
         self._test_matching(
             "alpha charlie gamma",
             "MATCH_ALL",
@@ -107,7 +105,6 @@ class TestMatching(_TestMatchingBase):
         )
 
     def test_match_any(self):
-
         self._test_matching(
             "alpha charlie gamma",
             "MATCH_ANY",
@@ -152,7 +149,6 @@ class TestMatching(_TestMatchingBase):
         )
 
     def test_match_literal(self):
-
         self._test_matching(
             "alpha charlie gamma",
             "MATCH_LITERAL",
@@ -187,7 +183,6 @@ class TestMatching(_TestMatchingBase):
         )
 
     def test_match_regex(self):
-
         self._test_matching(
             r"alpha\w+gamma",
             "MATCH_REGEX",
@@ -211,7 +206,6 @@ class TestMatching(_TestMatchingBase):
         self._test_matching("[", "MATCH_REGEX", [], ["Don't match this"])
 
     def test_match_fuzzy(self):
-
         self._test_matching(
             "Springfield, Miss.",
             "MATCH_FUZZY",
@@ -331,7 +325,6 @@ class TestCaseSensitiveMatching(_TestMatchingBase):
         )
 
     def test_match_literal(self):
-
         self._test_matching(
             "alpha charlie gamma",
             "MATCH_LITERAL",

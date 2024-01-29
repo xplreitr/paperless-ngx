@@ -14,8 +14,8 @@ import { DashboardComponent } from './components/dashboard/dashboard.component'
 import { TagListComponent } from './components/manage/tag-list/tag-list.component'
 import { DocumentTypeListComponent } from './components/manage/document-type-list/document-type-list.component'
 import { CorrespondentListComponent } from './components/manage/correspondent-list/correspondent-list.component'
-import { LogsComponent } from './components/manage/logs/logs.component'
-import { SettingsComponent } from './components/manage/settings/settings.component'
+import { LogsComponent } from './components/admin/logs/logs.component'
+import { SettingsComponent } from './components/admin/settings/settings.component'
 import { FormsModule, ReactiveFormsModule } from '@angular/forms'
 import { DatePipe, registerLocaleData } from '@angular/common'
 import { NotFoundComponent } from './components/not-found/not-found.component'
@@ -40,6 +40,7 @@ import { TextComponent } from './components/common/input/text/text.component'
 import { InputDebounceComponent } from './components/common/input/debounce/input-debounce.component'
 import { SelectComponent } from './components/common/input/select/select.component'
 import { CheckComponent } from './components/common/input/check/check.component'
+import { UrlComponent } from './components/common/input/url/url.component'
 import { PasswordComponent } from './components/common/input/password/password.component'
 import { SaveViewConfigDialogComponent } from './components/document-list/save-view-config-dialog/save-view-config-dialog.component'
 import { TagsComponent } from './components/common/input/tags/tags.component'
@@ -51,7 +52,6 @@ import { SavedViewWidgetComponent } from './components/dashboard/widgets/saved-v
 import { StatisticsWidgetComponent } from './components/dashboard/widgets/statistics-widget/statistics-widget.component'
 import { UploadFileWidgetComponent } from './components/dashboard/widgets/upload-file-widget/upload-file-widget.component'
 import { WidgetFrameComponent } from './components/dashboard/widgets/widget-frame/widget-frame.component'
-import { PdfViewerModule } from 'ng2-pdf-viewer'
 import { WelcomeWidgetComponent } from './components/dashboard/widgets/welcome-widget/welcome-widget.component'
 import { YesNoPipe } from './pipes/yes-no.pipe'
 import { FileSizePipe } from './pipes/file-size.pipe'
@@ -71,14 +71,14 @@ import { ApiVersionInterceptor } from './interceptors/api-version.interceptor'
 import { ColorSliderModule } from 'ngx-color/slider'
 import { ColorComponent } from './components/common/input/color/color.component'
 import { DocumentAsnComponent } from './components/document-asn/document-asn.component'
-import { DocumentCommentsComponent } from './components/document-comments/document-comments.component'
+import { DocumentNotesComponent } from './components/document-notes/document-notes.component'
 import { PermissionsGuard } from './guards/permissions.guard'
 import { DirtyDocGuard } from './guards/dirty-doc.guard'
 import { DirtySavedViewGuard } from './guards/dirty-saved-view.guard'
 import { StoragePathListComponent } from './components/manage/storage-path-list/storage-path-list.component'
 import { StoragePathEditDialogComponent } from './components/common/edit-dialog/storage-path-edit-dialog/storage-path-edit-dialog.component'
 import { SettingsService } from './services/settings.service'
-import { TasksComponent } from './components/manage/tasks/tasks.component'
+import { TasksComponent } from './components/admin/tasks/tasks.component'
 import { TourNgBootstrapModule } from 'ngx-ui-tour-ng-bootstrap'
 import { UserEditDialogComponent } from './components/common/edit-dialog/user-edit-dialog/user-edit-dialog.component'
 import { GroupEditDialogComponent } from './components/common/edit-dialog/group-edit-dialog/group-edit-dialog.component'
@@ -91,51 +91,257 @@ import { IfOwnerDirective } from './directives/if-owner.directive'
 import { IfObjectPermissionsDirective } from './directives/if-object-permissions.directive'
 import { PermissionsDialogComponent } from './components/common/permissions-dialog/permissions-dialog.component'
 import { PermissionsFormComponent } from './components/common/input/permissions/permissions-form/permissions-form.component'
-import { DndModule } from 'ngx-drag-drop'
+import { PermissionsFilterDropdownComponent } from './components/common/permissions-filter-dropdown/permissions-filter-dropdown.component'
+import { UsernamePipe } from './pipes/username.pipe'
+import { LogoComponent } from './components/common/logo/logo.component'
+import { IsNumberPipe } from './pipes/is-number.pipe'
+import { ShareLinksDropdownComponent } from './components/common/share-links-dropdown/share-links-dropdown.component'
+import { WorkflowsComponent } from './components/manage/workflows/workflows.component'
+import { WorkflowEditDialogComponent } from './components/common/edit-dialog/workflow-edit-dialog/workflow-edit-dialog.component'
+import { MailComponent } from './components/manage/mail/mail.component'
+import { UsersAndGroupsComponent } from './components/admin/users-groups/users-groups.component'
+import { DragDropModule } from '@angular/cdk/drag-drop'
+import { FileDropComponent } from './components/file-drop/file-drop.component'
+import { CustomFieldsComponent } from './components/manage/custom-fields/custom-fields.component'
+import { CustomFieldEditDialogComponent } from './components/common/edit-dialog/custom-field-edit-dialog/custom-field-edit-dialog.component'
+import { CustomFieldsDropdownComponent } from './components/common/custom-fields-dropdown/custom-fields-dropdown.component'
+import { ProfileEditDialogComponent } from './components/common/profile-edit-dialog/profile-edit-dialog.component'
+import { PdfViewerComponent } from './components/common/pdf-viewer/pdf-viewer.component'
+import { DocumentLinkComponent } from './components/common/input/document-link/document-link.component'
+import { PreviewPopupComponent } from './components/common/preview-popup/preview-popup.component'
+import { SwitchComponent } from './components/common/input/switch/switch.component'
+import { ConfigComponent } from './components/admin/config/config.component'
+import { FileComponent } from './components/common/input/file/file.component'
+import { NgxBootstrapIconsModule } from 'ngx-bootstrap-icons'
 import { SplitMergeComponent } from './components/split-merge/split-merge.component'
 import { PageChooserComponent } from './components/common/page-chooser/page-chooser.component'
+import {
+  archive,
+  arrowCounterclockwise,
+  arrowDown,
+  arrowLeft,
+  arrowRepeat,
+  arrowRight,
+  arrowRightShort,
+  arrowUpRight,
+  asterisk,
+  boxArrowUp,
+  boxArrowUpRight,
+  boxes,
+  calendar,
+  calendarEvent,
+  caretDown,
+  caretUp,
+  chatLeftText,
+  check,
+  check2All,
+  checkAll,
+  checkLg,
+  chevronDoubleLeft,
+  chevronDoubleRight,
+  clipboard,
+  clipboardCheckFill,
+  clipboardFill,
+  dash,
+  diagram3,
+  dice5,
+  doorOpen,
+  download,
+  envelope,
+  exclamationTriangle,
+  eye,
+  fileEarmark,
+  fileEarmarkCheck,
+  fileEarmarkFill,
+  fileEarmarkLock,
+  files,
+  fileText,
+  filter,
+  folder,
+  folderFill,
+  funnel,
+  gear,
+  grid,
+  gripVertical,
+  hash,
+  hddStack,
+  house,
+  infoCircle,
+  link,
+  listTask,
+  listUl,
+  pencil,
+  people,
+  peopleFill,
+  person,
+  personCircle,
+  personFill,
+  personFillLock,
+  personLock,
+  plus,
+  plusCircle,
+  questionCircle,
+  search,
+  slashCircle,
+  sliders2Vertical,
+  sortAlphaDown,
+  sortAlphaUpAlt,
+  tagFill,
+  tags,
+  textIndentLeft,
+  textLeft,
+  threeDots,
+  threeDotsVertical,
+  trash,
+  uiRadios,
+  upcScan,
+  x,
+  xLg,
+} from 'ngx-bootstrap-icons'
 
+const icons = {
+  archive,
+  arrowCounterclockwise,
+  arrowDown,
+  arrowLeft,
+  arrowRepeat,
+  arrowRight,
+  arrowRightShort,
+  arrowUpRight,
+  asterisk,
+  boxArrowUp,
+  boxArrowUpRight,
+  boxes,
+  calendar,
+  calendarEvent,
+  caretDown,
+  caretUp,
+  chatLeftText,
+  check,
+  check2All,
+  checkAll,
+  checkLg,
+  chevronDoubleLeft,
+  chevronDoubleRight,
+  clipboard,
+  clipboardCheckFill,
+  clipboardFill,
+  dash,
+  diagram3,
+  dice5,
+  doorOpen,
+  download,
+  envelope,
+  exclamationTriangle,
+  eye,
+  fileEarmark,
+  fileEarmarkCheck,
+  fileEarmarkFill,
+  fileEarmarkLock,
+  files,
+  fileText,
+  filter,
+  folder,
+  folderFill,
+  funnel,
+  gear,
+  grid,
+  gripVertical,
+  hash,
+  hddStack,
+  house,
+  infoCircle,
+  link,
+  listTask,
+  listUl,
+  pencil,
+  people,
+  peopleFill,
+  person,
+  personCircle,
+  personFill,
+  personFillLock,
+  personLock,
+  plus,
+  plusCircle,
+  questionCircle,
+  search,
+  slashCircle,
+  sliders2Vertical,
+  sortAlphaDown,
+  sortAlphaUpAlt,
+  tagFill,
+  tags,
+  textIndentLeft,
+  textLeft,
+  threeDots,
+  threeDotsVertical,
+  trash,
+  uiRadios,
+  upcScan,
+  x,
+  xLg,
+}
+
+import localeAf from '@angular/common/locales/af'
 import localeAr from '@angular/common/locales/ar'
 import localeBe from '@angular/common/locales/be'
+import localeBg from '@angular/common/locales/bg'
+import localeCa from '@angular/common/locales/ca'
 import localeCs from '@angular/common/locales/cs'
 import localeDa from '@angular/common/locales/da'
 import localeDe from '@angular/common/locales/de'
+import localeEl from '@angular/common/locales/el'
 import localeEnGb from '@angular/common/locales/en-GB'
 import localeEs from '@angular/common/locales/es'
+import localeFi from '@angular/common/locales/fi'
 import localeFr from '@angular/common/locales/fr'
+import localeHu from '@angular/common/locales/hu'
 import localeIt from '@angular/common/locales/it'
 import localeLb from '@angular/common/locales/lb'
 import localeNl from '@angular/common/locales/nl'
+import localeNo from '@angular/common/locales/no'
 import localePl from '@angular/common/locales/pl'
 import localePt from '@angular/common/locales/pt'
 import localeRo from '@angular/common/locales/ro'
 import localeRu from '@angular/common/locales/ru'
+import localeSk from '@angular/common/locales/sk'
 import localeSl from '@angular/common/locales/sl'
 import localeSr from '@angular/common/locales/sr'
 import localeSv from '@angular/common/locales/sv'
 import localeTr from '@angular/common/locales/tr'
+import localeUk from '@angular/common/locales/uk'
 import localeZh from '@angular/common/locales/zh'
 
+registerLocaleData(localeAf)
 registerLocaleData(localeAr)
 registerLocaleData(localeBe)
+registerLocaleData(localeBg)
+registerLocaleData(localeCa)
 registerLocaleData(localeCs)
 registerLocaleData(localeDa)
 registerLocaleData(localeDe)
+registerLocaleData(localeEl)
 registerLocaleData(localeEnGb)
 registerLocaleData(localeEs)
+registerLocaleData(localeFi)
 registerLocaleData(localeFr)
+registerLocaleData(localeHu)
 registerLocaleData(localeIt)
 registerLocaleData(localeLb)
 registerLocaleData(localeNl)
+registerLocaleData(localeNo)
 registerLocaleData(localePl)
 registerLocaleData(localePt, 'pt-BR')
 registerLocaleData(localePt, 'pt-PT')
 registerLocaleData(localeRo)
 registerLocaleData(localeRu)
+registerLocaleData(localeSk)
 registerLocaleData(localeSl)
 registerLocaleData(localeSr)
 registerLocaleData(localeSv)
 registerLocaleData(localeTr)
+registerLocaleData(localeUk)
 registerLocaleData(localeZh)
 
 function initializeApp(settings: SettingsService) {
@@ -178,6 +384,7 @@ function initializeApp(settings: SettingsService) {
     InputDebounceComponent,
     SelectComponent,
     CheckComponent,
+    UrlComponent,
     PasswordComponent,
     SaveViewConfigDialogComponent,
     TagsComponent,
@@ -201,7 +408,7 @@ function initializeApp(settings: SettingsService) {
     DateComponent,
     ColorComponent,
     DocumentAsnComponent,
-    DocumentCommentsComponent,
+    DocumentNotesComponent,
     TasksComponent,
     UserEditDialogComponent,
     GroupEditDialogComponent,
@@ -214,6 +421,26 @@ function initializeApp(settings: SettingsService) {
     IfObjectPermissionsDirective,
     PermissionsDialogComponent,
     PermissionsFormComponent,
+    PermissionsFilterDropdownComponent,
+    UsernamePipe,
+    LogoComponent,
+    IsNumberPipe,
+    ShareLinksDropdownComponent,
+    WorkflowsComponent,
+    WorkflowEditDialogComponent,
+    MailComponent,
+    UsersAndGroupsComponent,
+    FileDropComponent,
+    CustomFieldsComponent,
+    CustomFieldEditDialogComponent,
+    CustomFieldsDropdownComponent,
+    ProfileEditDialogComponent,
+    PdfViewerComponent,
+    DocumentLinkComponent,
+    PreviewPopupComponent,
+    SwitchComponent,
+    ConfigComponent,
+    FileComponent,
     SplitMergeComponent,
     PageChooserComponent,
   ],
@@ -225,11 +452,11 @@ function initializeApp(settings: SettingsService) {
     FormsModule,
     ReactiveFormsModule,
     NgxFileDropModule,
-    PdfViewerModule,
     NgSelectModule,
     ColorSliderModule,
     TourNgBootstrapModule,
-    DndModule,
+    DragDropModule,
+    NgxBootstrapIconsModule.pick(icons),
   ],
   providers: [
     {
@@ -257,6 +484,7 @@ function initializeApp(settings: SettingsService) {
     PermissionsGuard,
     DirtyDocGuard,
     DirtySavedViewGuard,
+    UsernamePipe,
   ],
   bootstrap: [AppComponent],
 })

@@ -6,14 +6,14 @@ import { DocumentDetailComponent } from './components/document-detail/document-d
 import { DocumentListComponent } from './components/document-list/document-list.component'
 import { CorrespondentListComponent } from './components/manage/correspondent-list/correspondent-list.component'
 import { DocumentTypeListComponent } from './components/manage/document-type-list/document-type-list.component'
-import { LogsComponent } from './components/manage/logs/logs.component'
-import { SettingsComponent } from './components/manage/settings/settings.component'
+import { LogsComponent } from './components/admin/logs/logs.component'
+import { SettingsComponent } from './components/admin/settings/settings.component'
 import { TagListComponent } from './components/manage/tag-list/tag-list.component'
 import { NotFoundComponent } from './components/not-found/not-found.component'
 import { DocumentAsnComponent } from './components/document-asn/document-asn.component'
 import { DirtyFormGuard } from './guards/dirty-form.guard'
 import { StoragePathListComponent } from './components/manage/storage-path-list/storage-path-list.component'
-import { TasksComponent } from './components/manage/tasks/tasks.component'
+import { TasksComponent } from './components/admin/tasks/tasks.component'
 import { PermissionsGuard } from './guards/permissions.guard'
 import { DirtyDocGuard } from './guards/dirty-doc.guard'
 import { DirtySavedViewGuard } from './guards/dirty-saved-view.guard'
@@ -21,9 +21,14 @@ import {
   PermissionAction,
   PermissionType,
 } from './services/permissions.service'
+import { WorkflowsComponent } from './components/manage/workflows/workflows.component'
+import { MailComponent } from './components/manage/mail/mail.component'
+import { UsersAndGroupsComponent } from './components/admin/users-groups/users-groups.component'
+import { CustomFieldsComponent } from './components/manage/custom-fields/custom-fields.component'
+import { ConfigComponent } from './components/admin/config/config.component'
 import { SplitMergeComponent } from './components/split-merge/split-merge.component'
 
-const routes: Routes = [
+export const routes: Routes = [
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
   {
     path: '',
@@ -58,6 +63,17 @@ const routes: Routes = [
       },
       {
         path: 'documents/:id',
+        component: DocumentDetailComponent,
+        canActivate: [PermissionsGuard],
+        data: {
+          requiredPermission: {
+            action: PermissionAction.View,
+            type: PermissionType.Document,
+          },
+        },
+      },
+      {
+        path: 'documents/:id/:section',
         component: DocumentDetailComponent,
         canActivate: [PermissionsGuard],
         data: {
@@ -133,6 +149,15 @@ const routes: Routes = [
           },
         },
       },
+      // redirect old paths
+      {
+        path: 'settings/mail',
+        redirectTo: '/mail',
+      },
+      {
+        path: 'settings/usersgroups',
+        redirectTo: '/usersgroups',
+      },
       {
         path: 'settings',
         component: SettingsComponent,
@@ -142,6 +167,29 @@ const routes: Routes = [
           requiredPermission: {
             action: PermissionAction.View,
             type: PermissionType.UISettings,
+          },
+        },
+      },
+      {
+        path: 'settings/:section',
+        component: SettingsComponent,
+        canDeactivate: [DirtyFormGuard],
+        canActivate: [PermissionsGuard],
+        data: {
+          requiredPermission: {
+            action: PermissionAction.View,
+            type: PermissionType.UISettings,
+          },
+        },
+      },
+      {
+        path: 'config',
+        component: ConfigComponent,
+        canActivate: [PermissionsGuard],
+        data: {
+          requiredPermission: {
+            action: PermissionAction.Change,
+            type: PermissionType.AppConfig,
           },
         },
       },
@@ -157,23 +205,49 @@ const routes: Routes = [
         },
       },
       {
-        path: 'settings/:section',
-        component: SettingsComponent,
-        canDeactivate: [DirtyFormGuard],
+        path: 'customfields',
+        component: CustomFieldsComponent,
         canActivate: [PermissionsGuard],
         data: {
           requiredPermission: {
             action: PermissionAction.View,
-            type: PermissionType.UISettings,
+            type: PermissionType.CustomField,
           },
         },
       },
       {
-        path: 'settings/:section',
-        component: SettingsComponent,
-        canDeactivate: [DirtyFormGuard],
+        path: 'workflows',
+        component: WorkflowsComponent,
+        canActivate: [PermissionsGuard],
+        data: {
+          requiredPermission: {
+            action: PermissionAction.View,
+            type: PermissionType.Workflow,
+          },
+        },
       },
-      { path: 'tasks', component: TasksComponent },
+      {
+        path: 'mail',
+        component: MailComponent,
+        canActivate: [PermissionsGuard],
+        data: {
+          requiredPermission: {
+            action: PermissionAction.View,
+            type: PermissionType.MailAccount,
+          },
+        },
+      },
+      {
+        path: 'usersgroups',
+        component: UsersAndGroupsComponent,
+        canActivate: [PermissionsGuard],
+        data: {
+          requiredPermission: {
+            action: PermissionAction.View,
+            type: PermissionType.User,
+          },
+        },
+      },
     ],
   },
 

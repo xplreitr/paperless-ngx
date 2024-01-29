@@ -6,22 +6,28 @@ provides a browsable API for most of its endpoints, which you can
 inspect at `http://<paperless-host>:<port>/api/`. This also documents
 most of the available filters and ordering fields.
 
-The API provides 7 main endpoints:
+The API provides the following main endpoints:
 
+- `/api/correspondents/`: Full CRUD support.
+- `/api/custom_fields/`: Full CRUD support.
 - `/api/documents/`: Full CRUD support, except POSTing new documents.
   See below.
-- `/api/correspondents/`: Full CRUD support.
 - `/api/document_types/`: Full CRUD support.
+- `/api/groups/`: Full CRUD support.
 - `/api/logs/`: Read-Only.
-- `/api/tags/`: Full CRUD support.
 - `/api/mail_accounts/`: Full CRUD support.
 - `/api/mail_rules/`: Full CRUD support.
+- `/api/profile/`: GET, PATCH
+- `/api/share_links/`: Full CRUD support.
+- `/api/storage_paths/`: Full CRUD support.
+- `/api/tags/`: Full CRUD support.
+- `/api/tasks/`: Read-only.
 - `/api/users/`: Full CRUD support.
-- `/api/groups/`: Full CRUD support.
+- `/api/workflows/`: Full CRUD support.
 
 All of these endpoints except for the logging endpoint allow you to
-fetch, edit and delete individual objects by appending their primary key
-to the path, for example `/api/documents/454/`.
+fetch (and edit and delete where appropriate) individual objects by
+appending their primary key to the path, e.g. `/api/documents/454/`.
 
 The objects served by the document endpoint contain the following
 fields:
@@ -46,6 +52,11 @@ fields:
   Read-only.
 - `archived_file_name`: Verbose filename of the archived document.
   Read-only. Null if no archived document is available.
+- `notes`: Array of notes associated with the document.
+- `set_permissions`: Allows setting document permissions. Optional,
+  write-only. See [below](#permissions).
+- `custom_fields`: Array of custom fields & values, specified as
+  `{ field: CUSTOM_FIELD_ID, value: VALUE }`
 
 ## Downloading documents
 
@@ -121,6 +132,11 @@ File metadata is reported as a list of objects in the following form:
 depends on the file type and the metadata available in that specific
 document. Paperless only reports PDF metadata at this point.
 
+## Documents additional endpoints
+
+- `/api/documents/<id>/notes/`: Retrieve notes for a document.
+- `/api/documents/<id>/share_links/`: Retrieve share links for a document.
+
 ## Authorization
 
 The REST api provides three different forms of authentication.
@@ -144,6 +160,10 @@ The REST api provides three different forms of authentication.
 
 3.  Token authentication
 
+    You can create (or re-create) an API token by opening the "My Profile"
+    link in the user dropdown found in the web UI and clicking the circular
+    arrow button.
+
     Paperless also offers an endpoint to acquire authentication tokens.
 
     POST a username and password as a form or json string to
@@ -155,7 +175,7 @@ The REST api provides three different forms of authentication.
     Authorization: Token <token>
     ```
 
-    Tokens can be managed and revoked in the paperless admin.
+    Tokens can also be managed in the Django admin.
 
 ## Searching for documents
 
@@ -164,7 +184,7 @@ specific query parameters cause the API to return full text search
 results:
 
 - `/api/documents/?query=your%20search%20query`: Search for a document
-  using a full text query. For details on the syntax, see [Basic Usage - Searching](/usage#basic-usage_searching).
+  using a full text query. For details on the syntax, see [Basic Usage - Searching](usage.md#basic-usage_searching).
 - `/api/documents/?more_like=1234`: Search for documents similar to
   the document with id 1234.
 
@@ -254,17 +274,55 @@ The endpoint supports the following optional form fields:
 - `correspondent`: Specify the ID of a correspondent that the consumer
   should use for the document.
 - `document_type`: Similar to correspondent.
+- `storage_path`: Similar to correspondent.
 - `tags`: Similar to correspondent. Specify this multiple times to
   have multiple tags added to the document.
-- `owner`: An optional user ID to set as the owner.
 - `archive_serial_number`: An optional archive serial number to set.
 
 The endpoint will immediately return HTTP 200 if the document consumption
 process was started successfully, with the UUID of the consumption task
-as the data. No additional status information about
-the consumption process itself is available immediately, since that happens in a
-different process. Querying the tasks endpoint with the returned UUID will
-provide information on the state of the consumption.
+as the data. No additional status information about the consumption process
+itself is available immediately, since that happens in a different process.
+However, querying the tasks endpoint with the returned UUID e.g.
+`/api/tasks/?task_id={uuid}` will provide information on the state of the
+consumption including the ID of a created document if consumption succeeded.
+
+## Permissions
+
+All objects (documents, tags, etc.) allow setting object-level permissions
+with optional `owner` and / or a `set_permissions` parameters which are of
+the form:
+
+```
+"owner": ...,
+"set_permissions": {
+    "view": {
+        "users": [...],
+        "groups": [...],
+    },
+    "change": {
+        "users": [...],
+        "groups": [...],
+    },
+}
+```
+
+!!! note
+
+    Arrays should contain user or group ID numbers.
+
+If these parameters are supplied the object's permissions will be overwritten,
+assuming the authenticated user has permission to do so (the user must be
+the object owner or a superuser).
+
+### Retrieving full permissions
+
+By default, the API will return a truncated version of object-level
+permissions, returning `user_can_change` indicating whether the current user
+can edit the object (either because they are the object owner or have permissions
+granted). You can pass the parameter `full_perms=true` to API calls to view the
+full permissions of objects in a format that mirrors the `set_permissions`
+parameter above.
 
 ## API Versioning
 

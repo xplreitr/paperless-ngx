@@ -1,7 +1,7 @@
 import { Component } from '@angular/core'
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap'
-import { FILTER_STORAGE_PATH } from 'src/app/data/filter-rule-type'
-import { PaperlessStoragePath } from 'src/app/data/paperless-storage-path'
+import { FILTER_HAS_STORAGE_PATH_ANY } from 'src/app/data/filter-rule-type'
+import { StoragePath } from 'src/app/data/storage-path'
 import { DocumentListViewService } from 'src/app/services/document-list-view.service'
 import {
   PermissionsService,
@@ -13,11 +13,11 @@ import { StoragePathEditDialogComponent } from '../../common/edit-dialog/storage
 import { ManagementListComponent } from '../management-list/management-list.component'
 
 @Component({
-  selector: 'app-storage-path-list',
+  selector: 'pngx-storage-path-list',
   templateUrl: './../management-list/management-list.component.html',
   styleUrls: ['./../management-list/management-list.component.scss'],
 })
-export class StoragePathListComponent extends ManagementListComponent<PaperlessStoragePath> {
+export class StoragePathListComponent extends ManagementListComponent<StoragePath> {
   constructor(
     directoryService: StoragePathService,
     modalService: NgbModal,
@@ -32,7 +32,7 @@ export class StoragePathListComponent extends ManagementListComponent<PaperlessS
       toastService,
       documentListViewService,
       permissionsService,
-      FILTER_STORAGE_PATH,
+      FILTER_HAS_STORAGE_PATH_ANY,
       $localize`storage path`,
       $localize`storage paths`,
       PermissionType.StoragePath,
@@ -40,7 +40,7 @@ export class StoragePathListComponent extends ManagementListComponent<PaperlessS
         {
           key: 'path',
           name: $localize`Path`,
-          valueFn: (c: PaperlessStoragePath) => {
+          valueFn: (c: StoragePath) => {
             return c.path
           },
         },
@@ -48,7 +48,7 @@ export class StoragePathListComponent extends ManagementListComponent<PaperlessS
     )
   }
 
-  getDeleteMessage(object: PaperlessStoragePath) {
+  getDeleteMessage(object: StoragePath) {
     return $localize`Do you really want to delete the storage path "${object.name}"?`
   }
 }

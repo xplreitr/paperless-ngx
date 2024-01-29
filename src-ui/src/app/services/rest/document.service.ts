@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core'
-import { PaperlessDocument } from 'src/app/data/paperless-document'
-import { PaperlessDocumentMetadata } from 'src/app/data/paperless-document-metadata'
+import { Document } from 'src/app/data/document'
+import { DocumentMetadata } from 'src/app/data/document-metadata'
 import { AbstractPaperlessService } from './abstract-paperless-service'
 import { HttpClient, HttpParams } from '@angular/common/http'
 import { Observable } from 'rxjs'
@@ -10,7 +10,7 @@ import { map, tap } from 'rxjs/operators'
 import { CorrespondentService } from './correspondent.service'
 import { DocumentTypeService } from './document-type.service'
 import { TagService } from './tag.service'
-import { PaperlessDocumentSuggestions } from 'src/app/data/paperless-document-suggestions'
+import { DocumentSuggestions } from 'src/app/data/document-suggestions'
 import { queryParamsFromFilterRules } from '../../utils/query-params'
 import { StoragePathService } from './storage-path.service'
 
@@ -22,6 +22,8 @@ export const DOCUMENT_SORT_FIELDS = [
   { field: 'created', name: $localize`Created` },
   { field: 'added', name: $localize`Added` },
   { field: 'modified', name: $localize`Modified` },
+  { field: 'num_notes', name: $localize`Notes` },
+  { field: 'owner', name: $localize`Owner` },
 ]
 
 export const DOCUMENT_SORT_FIELDS_FULLTEXT = [
@@ -47,7 +49,7 @@ export interface SelectionData {
 @Injectable({
   providedIn: 'root',
 })
-export class DocumentService extends AbstractPaperlessService<PaperlessDocument> {
+export class DocumentService extends AbstractPaperlessService<Document> {
   private _searchQuery: string
 
   constructor(
@@ -60,7 +62,7 @@ export class DocumentService extends AbstractPaperlessService<PaperlessDocument>
     super(http, 'documents')
   }
 
-  addObservablesToDocument(doc: PaperlessDocument) {
+  addObservablesToDocument(doc: Document) {
     if (doc.correspondent) {
       doc.correspondent$ = this.correspondentService.getCached(
         doc.correspondent
@@ -91,7 +93,7 @@ export class DocumentService extends AbstractPaperlessService<PaperlessDocument>
     sortReverse?: boolean,
     filterRules?: FilterRule[],
     extraParams = {}
-  ): Observable<Results<PaperlessDocument>> {
+  ): Observable<Results<Document>> {
     return this.list(
       page,
       pageSize,
@@ -110,6 +112,14 @@ export class DocumentService extends AbstractPaperlessService<PaperlessDocument>
     return this.listFiltered(1, 100000, null, null, filterRules, {
       fields: 'id',
     }).pipe(map((response) => response.results.map((doc) => doc.id)))
+  }
+
+  get(id: number): Observable<Document> {
+    return this.http.get<Document>(this.getResourceUrl(id), {
+      params: {
+        full_perms: true,
+      },
+    })
   }
 
   getPreviewUrl(id: number, original: boolean = false): string {
@@ -133,7 +143,11 @@ export class DocumentService extends AbstractPaperlessService<PaperlessDocument>
     return url
   }
 
-  update(o: PaperlessDocument): Observable<PaperlessDocument> {
+  getNextAsn(): Observable<number> {
+    return this.http.get<number>(this.getResourceUrl(null, 'next_asn'))
+  }
+
+  update(o: Document): Observable<Document> {
     // we want to only set created_date
     o.created = undefined
     return super.update(o)
@@ -147,10 +161,8 @@ export class DocumentService extends AbstractPaperlessService<PaperlessDocument>
     )
   }
 
-  getMetadata(id: number): Observable<PaperlessDocumentMetadata> {
-    return this.http.get<PaperlessDocumentMetadata>(
-      this.getResourceUrl(id, 'metadata')
-    )
+  getMetadata(id: number): Observable<DocumentMetadata> {
+    return this.http.get<DocumentMetadata>(this.getResourceUrl(id, 'metadata'))
   }
 
   bulkEdit(ids: number[], method: string, args: any) {
@@ -168,8 +180,8 @@ export class DocumentService extends AbstractPaperlessService<PaperlessDocument>
     )
   }
 
-  getSuggestions(id: number): Observable<PaperlessDocumentSuggestions> {
-    return this.http.get<PaperlessDocumentSuggestions>(
+  getSuggestions(id: number): Observable<DocumentSuggestions> {
+    return this.http.get<DocumentSuggestions>(
       this.getResourceUrl(id, 'suggestions')
     )
   }
