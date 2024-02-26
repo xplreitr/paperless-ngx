@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "7bc15a3bbd521f85a8cdcc85be8adf7c942acb53c6d461199d7f8b1ef63ac651"
+            "sha256": "3e824b6b9710b60ae118d2823d1f6e7a07040b2c00b2293155603d644a9d2607"
         },
         "pipfile-spec": 6,
         "requires": {},
@@ -45,6 +45,30 @@
             ],
             "markers": "python_version >= '3.7'",
             "version": "==4.0.3"
+        },
+        "azure-ai-formrecognizer": {
+            "hashes": [
+                "sha256:064803e0885bbe0429d1d282fc400123a5fc7f3baebb7f6ce30456450c08085e",
+                "sha256:3ea6ab27536e05f7a52953c8884f9488b4015bfe8904c87a4b5a8961b0a73792"
+            ],
+            "index": "pypi",
+            "markers": "python_version >= '3.7'",
+            "version": "==3.3.2"
+        },
+        "azure-common": {
+            "hashes": [
+                "sha256:4ac0cd3214e36b6a1b6a442686722a5d8cc449603aa833f3f0f40bda836704a3",
+                "sha256:5c12d3dcf4ec20599ca6b0d3e09e86e146353d443e7fcc050c9a19c1f9df20ad"
+            ],
+            "version": "==1.1.28"
+        },
+        "azure-core": {
+            "hashes": [
+                "sha256:3dae7962aad109610e68c9a7abb31d79720e1d982ddf61363038d175a5025e89",
+                "sha256:6f3a7883ef184722f6bd997262eddaf80cfe7e5b3e0caaaf8db1695695893d35"
+            ],
+            "markers": "python_version >= '3.7'",
+            "version": "==1.30.0"
         },
         "billiard": {
             "hashes": [
@@ -866,6 +890,13 @@
             "markers": "python_version >= '2.7' and python_version not in '3.0, 3.1, 3.2, 3.3'",
             "version": "==0.3.5"
         },
+        "isodate": {
+            "hashes": [
+                "sha256:0751eece944162659049d35f4f549ed815792b38793f07cf73381c1c87cbed96",
+                "sha256:48c5881de7e8b0a0d648cb024c8062dc84e7b840ed81e864c7614fd3c127bde9"
+            ],
+            "version": "==0.6.1"
+        },
         "joblib": {
             "hashes": [
                 "sha256:92f865e621e17784e7955080b6d042489e3b8e294949cc44c6eac304f59772b1",
@@ -1067,6 +1098,14 @@
             "markers": "python_version >= '3.8'",
             "version": "==1.0.8"
         },
+        "msrest": {
+            "hashes": [
+                "sha256:21120a810e1233e5e6cc7fe40b474eeb4ec6f757a15d7cf86702c369f9567c32",
+                "sha256:6e7661f46f3afd88b75667b7187a92829924446c7ea1d169be8c4bb7eeb788b9"
+            ],
+            "markers": "python_version >= '3.6'",
+            "version": "==0.7.1"
+        },
         "mysqlclient": {
             "hashes": [
                 "sha256:329e4eec086a2336fe3541f1ce095d87a6f169d1cc8ba7b04ac68bcb234c9711",
@@ -1150,6 +1189,15 @@
             "index": "pypi",
             "markers": "python_version >= '3.9'",
             "version": "==15.4.4"
+        },
+        "openai": {
+            "hashes": [
+                "sha256:99c5d257d09ea6533d689d1cc77caa0ac679fa21efef8893d8b0832a86877f1b",
+                "sha256:a54002c814e05222e413664f651b5916714e4700d041d5cf5724d3ae1a3e3481"
+            ],
+            "index": "pypi",
+            "markers": "python_full_version >= '3.7.1'",
+            "version": "==1.12.0"
         },
         "packaging": {
             "hashes": [

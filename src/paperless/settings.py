@@ -297,6 +297,7 @@ INSTALLED_APPS = [
     "paperless_tesseract.apps.PaperlessTesseractConfig",
     "paperless_text.apps.PaperlessTextConfig",
     "paperless_mail.apps.PaperlessMailConfig",
+    "paperless_remote.apps.PaperlessRemoteParserConfig",
     "django.contrib.admin",
     "rest_framework",
     "rest_framework.authtoken",
@@ -1149,3 +1150,11 @@ EMAIL_SUBJECT_PREFIX: Final[str] = "[Paperless-ngx] "
 if DEBUG:  # pragma: no cover
     EMAIL_BACKEND = "django.core.mail.backends.filebased.EmailBackend"
     EMAIL_FILE_PATH = BASE_DIR / "sent_emails"
+
+###############################################################################
+# Remote Parser                                                               #
+###############################################################################
+
+REMOTE_PARSER_ENGINE = os.getenv("PAPERLESS_REMOTE_PARSER_ENGINE")
+REMOTE_PARSER_API_KEY = os.getenv("PAPERLESS_REMOTE_PARSER_API_KEY")
+REMOTE_PARSER_ENDPOINT = os.getenv("PAPERLESS_REMOTE_PARSER_ENDPOINT")
