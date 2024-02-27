@@ -28,6 +28,7 @@ channels-redis = "*"
 concurrent-log-handler = "*"
 filelock = "*"
 flower = "*"
+google-cloud-vision = "*"
 gotenberg-client = "*"
 gunicorn = "*"
 imap-tools = "*"
@@ -57,6 +58,7 @@ watchdog = "~=4.0"
 whitenoise = "~=6.6"
 whoosh="~=2.7"
 zxing-cpp = {version = "*", platform_machine = "== 'x86_64'"}
+google-cloud-storage = "*"
 
 [dev-packages]
 # Linting
