@@ -46,11 +46,12 @@ class RemoteDocumentParser(RasterisedDocumentParser):
         This parser uses the OCR configuration settings to parse documents
         """
         return RemoteEngineConfig(
-            engine=settings.REMOTE_PARSER_ENGINE,
-            api_key=settings.REMOTE_PARSER_API_KEY,
-            endpoint=settings.REMOTE_PARSER_ENDPOINT,
-            api_key_id=settings.REMOTE_PARSER_API_KEY_ID,
-            region=settings.REMOTE_PARSER_REGION,
+            engine=settings.REMOTE_OCR_ENGINE,
+            api_key=settings.REMOTE_OCR_API_KEY,
+            endpoint=settings.REMOTE_OCR_ENDPOINT,
+            api_key_id=settings.REMOTE_OCR_API_KEY_ID,
+            region=settings.REMOTE_OCR_REGION,
+            credentials_file=settings.REMOTE_OCR_CREDENTIALS_FILE,
         )
 
     def supported_mime_types(self):
