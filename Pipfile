@@ -5,6 +5,7 @@ name = "pypi"
 
 [packages]
 azure-ai-formrecognizer = "*"
+boto3 = "*"
 dateparser = "~=1.2"
 # WARNING: django does not use semver.
 #          Only patch versions are guaranteed to not introduce breaking changes.
@@ -22,7 +23,6 @@ djangorestframework = "~=3.14"
 djangorestframework-guardian = "*"
 drf-writable-nested = "*"
 bleach = "*"
-boto3 = "*"
 celery = {extras = ["redis"], version = "*"}
 channels = "~=4.0"
 channels-redis = "*"
@@ -30,6 +30,7 @@ concurrent-log-handler = "*"
 filelock = "*"
 flower = "*"
 google-cloud-vision = "*"
+google-cloud-storage = "*"
 gotenberg-client = "*"
 gunicorn = "*"
 imap-tools = "*"
@@ -58,7 +59,6 @@ watchdog = "~=4.0"
 whitenoise = "~=6.6"
 whoosh="~=2.7"
 zxing-cpp = {version = "*", platform_machine = "== 'x86_64'"}
-google-cloud-storage = "*"
 
 [dev-packages]
 # Linting
