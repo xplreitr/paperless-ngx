@@ -1,9 +1,13 @@
+import uuid
 from pathlib import Path
+from unittest import mock
 
 from django.test import TestCase
+from django.test import override_settings
 
 from documents.tests.utils import DirectoriesMixin
 from documents.tests.utils import FileSystemAssertsMixin
+from paperless_remote.parsers import RemoteDocumentParser
 
 
 class TestParser(DirectoriesMixin, FileSystemAssertsMixin, TestCase):
@@ -19,27 +23,55 @@ class TestParser(DirectoriesMixin, FileSystemAssertsMixin, TestCase):
                 self.fail(f"'{s}' is not in '{content}'")
         self.assertListEqual(indices, sorted(indices))
 
-    # Currently test is not working on 3.11 on CI but works locally. Dont know why.
-    # @mock.patch("azure.ai.formrecognizer.DocumentAnalysisClient.begin_analyze_document")
-    # def test_get_text_with_azure(self, mock_begin_analyze_document):
-    #     result = mock.Mock()
-    #     result.content = "This is a test document."
-    #     mock_begin_analyze_document.return_value.result.return_value = result
+    @mock.patch("azure.ai.formrecognizer.DocumentAnalysisClient")
+    def test_get_text_with_azure(self, mock_azure_client):
+        result = mock.Mock()
+        result.content = "This is a test document."
 
-    #     with override_settings(
-    #         REMOTE_PARSER_ENGINE="azureaivision",
-    #         REMOTE_PARSER_API_KEY="somekey",
-    #         REMOTE_PARSER_ENDPOINT="https://endpoint.cognitiveservices.azure.com/",
-    #     ):
-    #         parser = RemoteDocumentParser(uuid.uuid4())
-    #         parser.parse(
-    #             self.SAMPLE_FILES / "simple-digital.pdf",
-    #             "application/pdf",
-    #         )
+        mock_azure_client.return_value.begin_analyze_document.return_value.result.return_value = (
+            result
+        )
 
-    #         mock_begin_analyze_document.assert_called_once()
+        with override_settings(
+            REMOTE_PARSER_ENGINE="azureaivision",
+            REMOTE_PARSER_API_KEY="somekey",
+            REMOTE_PARSER_ENDPOINT="https://endpoint.cognitiveservices.azure.com/",
+        ):
+            parser = RemoteDocumentParser(uuid.uuid4())
+            parser.parse(
+                self.SAMPLE_FILES / "simple-digital.pdf",
+                "application/pdf",
+            )
 
-    #         self.assertContainsStrings(
-    #             parser.text.strip(),
-    #             ["This is a test document."],
-    #         )
+            self.assertContainsStrings(
+                parser.text.strip(),
+                ["This is a test document."],
+            )
+
+    @mock.patch("boto3.client")
+    def test_get_text_with_awstextract(self, mock_aws_client):
+        mock_aws_client.return_value.analyze_document.return_value = {
+            "Blocks": [
+                {
+                    "BlockType": "LINE",
+                    "Text": "This is a test document.",
+                },
+            ],
+        }
+
+        with override_settings(
+            REMOTE_PARSER_ENGINE="awstextract",
+            REMOTE_PARSER_API_KEY="somekey",
+            REMOTE_PARSER_API_KEY_ID="somekeyid",
+            REMOTE_PARSER_REGION="us-west-2",
+        ):
+            parser = RemoteDocumentParser(uuid.uuid4())
+            parser.parse(
+                self.SAMPLE_FILES / "simple-digital.pdf",
+                "application/pdf",
+            )
+
+            self.assertContainsStrings(
+                parser.text.strip(),
+                ["This is a test document."],
+            )

@@ -8,15 +8,29 @@ from paperless_tesseract.parsers import RasterisedDocumentParser
 
 
 class RemoteEngineConfig:
-    def __init__(self, engine: str, api_key: str, endpoint: Optional[str] = None):
+    def __init__(
+        self,
+        engine: str,
+        api_key: str,
+        endpoint: Optional[str] = None,
+        api_key_id: Optional[str] = None,
+        region: Optional[str] = None,
+    ):
         self.engine = engine
         self.api_key = api_key
         self.endpoint = endpoint
+        self.api_key_id = api_key_id
+        self.region = region
 
     def engine_is_valid(self):
-        valid = self.engine in ["chatgpt", "azureaivision"] and self.api_key is not None
+        valid = (
+            self.engine in ["azureaivision", "awstextract", "googlecloudvision"]
+            and self.api_key is not None
+        )
         if self.engine == "azureaivision":
             valid = valid and self.endpoint is not None
+        if self.engine == "awstextract":
+            valid = valid and self.region is not None and self.api_key_id is not None
         return valid
 
 
@@ -35,6 +49,8 @@ class RemoteDocumentParser(RasterisedDocumentParser):
             engine=settings.REMOTE_PARSER_ENGINE,
             api_key=settings.REMOTE_PARSER_API_KEY,
             endpoint=settings.REMOTE_PARSER_ENDPOINT,
+            api_key_id=settings.REMOTE_PARSER_API_KEY_ID,
+            region=settings.REMOTE_PARSER_REGION,
         )
 
     def supported_mime_types(self):
@@ -57,47 +73,36 @@ class RemoteDocumentParser(RasterisedDocumentParser):
         else:
             return []
 
-    def chatgpt_parse(
+    def aws_textract_parse(
         self,
         file: Path,
     ) -> Optional[str]:
-        # does not work
-        from openai import OpenAI
+        import boto3
 
-        client = OpenAI(
-            api_key=self.settings.api_key,
+        client = boto3.client(
+            "textract",
+            region_name=self.settings.region,
+            aws_access_key_id=self.settings.api_key_id,
+            aws_secret_access_key=self.settings.api_key,
         )
-        assistants = client.beta.assistants.list()
-        for assistant in assistants.data:
-            if assistant.name == "Paperless-ngx Document Parser":
-                assistant = assistant
-                break
-        if not assistant:
-            assistant = client.beta.assistants.create(
-                model="gpt-3.5-turbo",
-                tools=[{"type": "code_interpreter"}],
-                name="Paperless-ngx Document Parser",
-            )
 
-        self.log.info("Uploading document to OpenAI...")
-        gpt_file = client.files.create(file=file, purpose="assistants")
-        client.files.wait_for_processing(gpt_file.id)
-        client.beta.assistants.update(assistant_id=assistant.id, files=[gpt_file.id])
-        thread = client.beta.threads.create()
-        client.beta.threads.messages.create(
-            thread_id=thread.id,
-            role="user",
-            content="Output the text of the file",
+        lines = []
+        with open(file, "rb") as f:
+            file_bytes = f.read()
+            file_bytearray = bytearray(file_bytes)
+
+        self.log.info("Analyzing document with AWS Textract...")
+        response = client.analyze_document(
+            Document={"Bytes": file_bytearray},
+            FeatureTypes=["TABLES"],
         )
-        client.beta.threads.runs.create(
-            thread_id=thread,
-            assistant_id=assistant.id,
-        )
-        response = client.beta.threads.messages.list(
-            thread_id=thread.id,
-        )
-        self.text = response.data[0].content[0].text.value
-        client.files.delete(gpt_file.id)
+
+        blocks = response["Blocks"]
+        for block in blocks:
+            if block["BlockType"] == "LINE":
+                lines.append(block["Text"])
+
+        return "\n".join(lines)
 
     def azure_ai_vision_parse(
         self,
@@ -197,15 +202,9 @@ class RemoteDocumentParser(RasterisedDocumentParser):
             )
             self.text = ""
             return
-        elif self.settings.engine == "chatgpt":
-            self.text = self.chatgpt_parse(document_path)
         elif self.settings.engine == "azureaivision":
             self.text = self.azure_ai_vision_parse(document_path)
+        elif self.settings.engine == "awstextract":
+            self.text = self.aws_textract_parse(document_path)
         elif self.settings.engine == "googlecloudvision":
             self.text = self.google_cloud_vision_parse(document_path, mime_type)
-        else:
-            self.log.warning(
-                "No valid remote parser engine is configured, content will be empty.",
-            )
-            self.text = ""
-            return

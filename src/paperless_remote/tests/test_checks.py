@@ -33,6 +33,19 @@ class TestChecks(TestCase):
             ),
         )
 
+    @override_settings(REMOTE_PARSER_ENGINE="awstextract")
+    @override_settings(REMOTE_PARSER_API_KEY="somekey")
+    @override_settings(REMOTE_PARSER_API_KEY_ID=None)
+    @override_settings(REMOTE_PARSER_REGION=None)
+    def test_aws_no_id_or_region(self):
+        msgs = check_remote_parser_configured(None)
+        self.assertEqual(len(msgs), 1)
+        self.assertTrue(
+            msgs[0].msg.startswith(
+                "AWS Textract remote parser requires access key ID and region to be configured.",
+            ),
+        )
+
     @override_settings(REMOTE_PARSER_ENGINE="something")
     @override_settings(REMOTE_PARSER_API_KEY="somekey")
     def test_valid_configuration(self):

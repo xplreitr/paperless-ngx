@@ -22,4 +22,13 @@ def check_remote_parser_configured(app_configs, **kwargs):
             ),
         ]
 
+    if settings.REMOTE_PARSER_ENGINE == "awstextract" and (
+        not settings.REMOTE_PARSER_API_KEY_ID or not settings.REMOTE_PARSER_REGION
+    ):
+        return [
+            Error(
+                "AWS Textract remote parser requires access key ID and region to be configured.",
+            ),
+        ]
+
     return []
