@@ -109,6 +109,13 @@ class RemoteDocumentParser(RasterisedDocumentParser):
 
         return "\n".join(lines)
 
+    def get_bbox_from_polygon(self, polygon) -> str:  # Sequence[Point]
+        if not polygon:
+            return "0 0 0 0"
+        x_coordinates = [point.x for point in polygon]
+        y_coordinates = [point.y for point in polygon]
+        return f"{min(x_coordinates)} {min(y_coordinates)} {max(x_coordinates)} {max(y_coordinates)}"
+
     def azure_ai_vision_parse(
         self,
         file: Path,
@@ -129,6 +136,21 @@ class RemoteDocumentParser(RasterisedDocumentParser):
                 document=f,
             )
         result = poller.result()
+
+        hocr = "<html><body>"
+
+        for page_number, page in enumerate(result.pages, start=1):
+            hocr += f'<div class="ocr_page" id="page_{page_number}" title="bbox 0 0 {page.width} {page.height}">'
+
+            for idx, word in enumerate(page.words):
+                bbox = self.get_bbox_from_polygon(word.polygon)
+                hocr += f'<span class="ocr_word" id="line_{page_number}_{idx}" title="bbox {bbox}">{word.content}</span>'
+
+            hocr += "</div>"
+
+        hocr += "</body></html>"
+
+        self.log.info(f"HOCR output: {hocr}")
 
         return result.content
 

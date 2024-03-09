@@ -34,6 +34,44 @@ class TestParser(DirectoriesMixin, FileSystemAssertsMixin, TestCase):
     def test_get_text_with_azure(self, mock_azure_client):
         result = mock.Mock()
         result.content = "This is a test document."
+        result.pages = [
+            mock.Mock(
+                width=100,
+                height=100,
+                words=[
+                    mock.Mock(
+                        content="This",
+                        polygon=[
+                            mock.Mock(x=0, y=0),
+                        ],
+                    ),
+                    mock.Mock(
+                        content="is",
+                        polygon=[
+                            mock.Mock(x=10, y=10),
+                        ],
+                    ),
+                    mock.Mock(
+                        content="a",
+                        polygon=[
+                            mock.Mock(x=20, y=20),
+                        ],
+                    ),
+                    mock.Mock(
+                        content="test",
+                        polygon=[
+                            mock.Mock(x=30, y=30),
+                        ],
+                    ),
+                    mock.Mock(
+                        content="document.",
+                        polygon=[
+                            mock.Mock(x=40, y=40),
+                        ],
+                    ),
+                ],
+            ),
+        ]
 
         mock_azure_client.return_value.begin_analyze_document.return_value.result.return_value = (
             result
