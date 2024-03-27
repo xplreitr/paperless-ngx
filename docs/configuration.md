@@ -1534,3 +1534,7 @@ password. All of these options come from their similarly-named [Django settings]
 #### [`PAPERLESS_EMAIL_USE_SSL=<bool>`](#PAPERLESS_EMAIL_USE_SSL) {#PAPERLESS_EMAIL_USE_SSL}
 
 : Defaults to false.
+
+!!! note
+
+    You will receive an error if both PAPERLESS_EMAIL_USE_SSL and PAPERLESS_EMAIL_USE_TLS are set to true. The correct configuration requires one or neither to be true.
